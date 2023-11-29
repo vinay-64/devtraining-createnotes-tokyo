@@ -1,0 +1,2703 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_rel_widget_clone">
+    <sp_rel_widget_clone action="INSERT_OR_UPDATE">
+        <child display_value="Copy of User Skills">7b9fae614376b510cc7e00002fb8f216</child>
+        <cloned>2023-11-29 05:47:23</cloned>
+        <last_validated>2023-11-29 05:47:23</last_validated>
+        <parent display_value="User Skills">a12b08b44f2211101f1cbd6b0e72e00e</parent>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;sp_widget&gt;&lt;category&gt;custom&lt;/category&gt;&lt;client_script&gt;&lt;![CDATA[function userSkillController($rootScope, $scope, spUtil, $location, spModal, $window, $http, $sce) {
+    var c = this;
+    let supportedFileTypes = ['txt', 'pdf', 'csv', 'docx', 'zip'];
+    let extractedSkills = [];
+    let resumeHeaderMsg = "${Here’s what we found from your resume}";
+    let linkedInHeaderMsg = "${Here’s what we found from your LinkedIn profile}"
+    c.skill_header_msg = "";
+    c.showUnavailableSkillsAlert = false;
+    c.unavailableSkillsMessage = "";
+    c.subtitle_below_image = "${No skills have been added yet. Let’s get started!}";
+    c.button_name = "${Upload a resume}";
+    c.modal_title = "${Skills upload}";
+    c.completionValue = 0;
+    c.modal_body_text_below_image = "${Supported file types: (Resume: .docx, .pdf, .txt) (LinkedIn: .zip)}";
+    c.no_access_message = "${Sorry, you do not have access to this widget.}";
+    c.changeSkillProficiency = {
+        id: "changeSkillProficiency",
+        name: "${Change skill proficiency}"
+    };
+    c.dragFile = true;
+    c.showDropMessage = true;
+    c.isAllSelected = true;
+    $scope.showRequiredSkills = true;
+    $scope.showAdditionalSkills = true;
+    $scope.showRecommendedSkills = true;
+    c.useAttachModalOnly = c.data.useAttachModalOnly;
+    $scope.requiredSkills = c.data.requiredSkills;
+    $scope.focusElement = null;
+    $scope.additionalSkillsHeader = "${Additional skills}";
+    $scope.requiredSkillsHeader = "${Required skills}";
+    $scope.recommendedSkillsHeader = "${Recommended skills}";
+    c.deleteSkill = {
+        id: "deleteSkill",
+        name: "${Delete skill}"
+    };
+    c.addSkill = {
+        id: "addSkill",
+        name: "${Add skill}"
+    };
+    $scope.addSkills = function() {
+        c.data.addskills = true;
+    };
+
+    //We should hide the widget if user trying to access other users profile and there are no skills present
+    if (!c.data.showSkillActionItems &amp;&amp; c.data.userSkills.length === 0 &amp;&amp; c.data.requiredSkills.length === 0)
+        c.displayWidget = false;
+    else
+        c.displayWidget = true;
+
+    var reRenderSlider = function() {
+        c.data.userSkills.concat($scope.requiredSkills).concat(c.data.recomendedSkills)
+            .concat(c.data.filteredSkills).concat(c.data.roleLevelSkills).forEach(function(item) {
+                if (item &amp;&amp; item.levels &amp;&amp; item.levels.length &gt; 0 &amp;&amp; item.maxRating &amp;&amp; item.minRating != 0) {
+                    item.backgroundPosition = $scope.getBackgroungPosition(item, 1);
+                }
+                if (item &amp;&amp; item.levels &amp;&amp; item.levels.length &gt; 0 &amp;&amp; item.maxRating &amp;&amp; item.minRating == 0) {
+                    item.backgroundPosition = $scope.getBackgroungPosition(item, 0);
+                }
+            });
+    }
+    var previousFontSize = '';
+
+
+
+    function checkFontSize() {
+        const fontSize = window.getComputedStyle(document.body).fontSize;
+        if (fontSize !== previousFontSize) {
+            previousFontSize = fontSize;
+            reRenderSlider();
+            $scope.$applyAsync()
+        }
+    }
+    setInterval(checkFontSize, 100); // Check every 100 milliseconds
+
+    var appWindow = angular.element($window);
+    appWindow.bind('resize', function(event) {
+        reRenderSlider();
+    });
+
+    // This is used as an workaround in iphone to hide the modal-backdrop which hides the modal window
+    var isIOS = function() {
+        var userAgent = window.navigator.userAgent.toLowerCase();
+        return /iphone|ipad|ipod/.test(userAgent);
+    }
+    if (isIOS()) {
+        $(document).on('show.bs.modal', '.modal', function() {
+            setTimeout(function() {
+                document.querySelectorAll(".modal-backdrop").forEach(function(item) {
+                    item.style.position = 'unset';
+                });
+            });
+        });
+    }
+
+    $scope.closeskillsearch = function(event) {
+        if (event.relatedTarget.getAttribute("id") != "input")
+            c.data.addskills = false;
+    }
+
+    $scope.closeAll = function() {
+        c.data.userSkills.concat($scope.requiredSkills).concat(c.data.recomendedSkills).forEach(function(skillTemp) {
+            if (skillTemp)
+                skillTemp.showLevelSlider = false;
+        });
+    }
+    $scope.alignPopover = function(skill) {
+        setTimeout(function() {
+            var el = angular.element('#rating-popover-' + skill.skillSysId);
+            if (el &amp;&amp; el.length &gt; 0) {
+                var right = window.getComputedStyle(el[0]).right;
+                var right2 = el[0].getBoundingClientRect().right;
+                if (right.indexOf("-") === 0 &amp;&amp; window.innerWidth &lt; right2) {
+                    el[0].style.left = right;
+                }
+            }
+        });
+    }
+    $scope.skillPillActionClicked = function(actionId, skill, min) {
+        if (actionId === c.changeSkillProficiency.id &amp;&amp; skill.showProficiency) {
+            c.updateButtonDisabled = true;
+            $scope.skillClicked(skill, min);
+            skill.showLevelSlider = true;
+            $scope.alignPopover(skill);
+        } else if (actionId === 'pillClicked') {
+            $scope.closeAll();
+        }
+        if (actionId === c.deleteSkill.id) {
+            $scope.deleteSkill(skill);
+        }
+        if (actionId === c.addSkill.id) {
+            if (skill.showProficiency) {
+                c.updateButtonDisabled = true;
+                skill.recommendedAction = true;
+                c.data.skillWithLevel = true;
+                $scope.skillClicked(skill, min);
+                skill.showLevelSlider = true;
+                $scope.alignPopover(skill);
+            } else {
+                c.data.skillWithLevel = false;
+                c.data.action = "addRecommendedSkill";
+                c.data.skillId = skill.skillSysId;
+                c.server.update();
+            }
+
+        }
+    };
+    $scope.addRecommendedSkills = function(skill) {
+        var levelVal = skill.givenRating;
+        if (skill.recommendedAction) {
+            c.data.action = "addRecommendedSkill";
+            c.data.levelval = skill.levels[levelVal].sysid;
+            c.data.skillId = skill.skillSysId;
+            c.server.update();
+        }
+    };
+    $scope.deleteSkill = function(skill) {
+
+        var nextFocusElement = document.getElementById("pillId-" + skill.id).parentElement.parentElement.nextElementSibling;
+        if (nextFocusElement != null)
+            nextFocusElement = nextFocusElement.querySelector('div.dropdown');
+        if (nextFocusElement) {
+            $scope.focusElement = nextFocusElement.id;
+        }
+        $('#deleteSkillModal').modal('show');
+        $('#deleteSkillModal').off().on('click', '#closeButtonId', function() {
+            $('#deleteSkillModal').modal('hide');
+        });
+        $('#deleteSkillModal').on('click', '.btn.btn-danger[primary="true"]', function() {
+            $('#deleteSkillModal').modal('hide');
+            c.data.action = 'deleteSkill';
+            c.data.skillRecordId = skill.recordSysId;
+            c.server.update();
+        });
+        $('#deleteSkillModal').on('click', '.btn.btn-default[cancel="true"]', function() {
+            $('#deleteSkillModal').modal('hide');
+        });
+    };
+
+    $scope.hideLevelSlider = function(skill, min) {
+        if (skill.showLevelSlider) {
+            skill.showLevelSlider = false;
+            skill.givenRating = skill.previousRating;
+            $scope.ratingChanged(skill, min);
+        }
+    }
+
+    $scope.getShowValueLeft = function(data, min, modal) {
+        var temp = 0.2;
+        var el = angular.element('.modal.fade.in');
+        if (document.body.offsetWidth &lt;= 600 &amp;&amp; (modal || el.length &gt; 0))
+            temp = 140 / 1000;
+        var newValue = (data.givenRating - min) * 100 / (data.maxRating - min);
+        var newPosition = 10 - (newValue * temp);
+        var value = 'calc(' + newValue + '% + ' + newPosition + 'px)';
+        return value;
+    };
+
+    var convertRemToPixels = function(rem) {
+        return rem * parseFloat(getComputedStyle(document.documentElement).fontSize);
+    }
+    $scope.getBackgroungPosition = function(data, min, modal) {
+        var width = convertRemToPixels(20);
+        var temp = width ? width + 'px' : '200px';
+        var el = angular.element('.modal-backdrop');
+        if (document.body.offsetWidth &lt;= 600 &amp;&amp; (modal || el.length &gt; 0))
+            temp = '140px';
+        var level = data.givenRating - 0;
+        var range = data.maxRating - min;
+        var newValue = data.maxRating - level;
+        if (level === data.maxRating) {
+            return '100%';
+        } else if (!level || level === min) {
+            return 'calc(100% - ' + temp + ')';
+        }
+        return 'calc(100% - ' + temp + '/' + range + '*' + newValue + ')';
+    };
+
+    $window.addEventListener('click', function(event) {
+        if (document.getElementById('roleLevelSkillsModal') === event.target)
+            $scope.closeModal();
+    });
+
+    $scope.toggleAllOnEnter = function($event) {
+        if ($event.keyCode === 13) {
+            c.isAllSelected = !c.isAllSelected;
+            $scope.toggleAll();
+        }
+    }
+
+    $scope.selectSkill = function($event, skill, checkboxType) {
+        if ($event.keyCode === 13) {
+            skill.checked = !skill.checked;
+            $scope.optionToggled(checkboxType);
+        }
+    }
+
+    $scope.ratingChanged = function(data, min, modal) {
+        if ((data.isValidated &amp;&amp; parseInt(data.givenRating) &lt; data.previousRating) || data.givenRating == 0 || parseInt(data.givenRating) == data.previousRating || (data.validatedSkillLevelValue !== null &amp;&amp; parseInt(data.givenRating) &lt; data.validatedSkillLevelValue))
+            c.updateButtonDisabled = true;
+        else
+            c.updateButtonDisabled = false;
+        data.left = $scope.getShowValueLeft(data, min, modal);
+        data.backgroundPosition = $scope.getBackgroungPosition(data, min, modal);
+        data.checked = true;
+    }
+
+    $scope.checkDisabled = function(data) {
+        return data &amp;&amp; data.filter(function(item) {
+            if (item.checked)
+                return item;
+        }).length === 0;
+    }
+
+    $scope.checkDisabled = function(data) {
+        return data &amp;&amp; data.filter(function(item) {
+            if (item.checked)
+                return item;
+        }).length === 0;
+    }
+
+    var src = $location.search().src;
+    if (src === 'pp') {
+        c.data.action = 'fetchRoleLevelSkills';
+        c.server.update().then(function(resp) {
+            c.roleName = c.data.roleTitle;
+            if (c.data.roleSpecificSkills) {
+                var roleLevelSkills = c.data.roleSpecificSkills.sort(function(a, b) {
+                    return b.required - a.required;
+                });
+                c.isAllSelected = true;
+                var toggleStatus = c.isAllSelected;
+                roleLevelSkills.forEach(function(item) {
+                    item.checked = toggleStatus;
+                    if (item.givenRating == 0)
+                        item.givenRating = 1;
+                    if (item.levels &amp;&amp; item.levels.length &gt; 0 &amp;&amp; item.maxRating)
+                        $scope.ratingChanged(item, 1, true);
+                });
+                if (roleLevelSkills.length == 0)
+                    c.newSkillsFound = false;
+                else
+                    c.newSkillsFound = true;
+                c.showSkills = true;
+                c.showSkillselection = true;
+                c.data.roleLevelSkills = roleLevelSkills;
+                angular.element("#roleLevelSkillsModal").modal("show");
+            }
+        });
+    }
+
+    $window.addEventListener('popstate', function(event) {
+        var src = $location.search().src;
+        var url = window.location.href;
+        if (src === 'pp') {
+            url = url.replace(/([\?&amp;])src=pp(&amp;|$)/, '$1');
+            history.replaceState(null, '', url);
+        }
+    });
+
+    $scope.onBlur = function($event, nextFocus) {
+        if ($event.keyCode === 9 &amp;&amp; !$event.shiftKey) {
+            var elem = document.getElementById(nextFocus);
+            if (elem) {
+                elem.focus();
+                $event.preventDefault();
+            }
+        }
+    }
+    $scope.changeIcon = function(icon) {
+        $scope[icon] = !$scope[icon];
+    };
+
+    /*Using the stopPropagation() we can prevents propagation of the same event from being called*/
+    $scope.holdInnerDropdown = function(innerDopdown, event) {
+        $scope.showDropDown = innerDopdown;
+        if (event)
+            event.stopPropagation();
+    }
+
+    /*getting the skillId of the skill on which we clicked*/
+    $scope.skillClicked = function(skill, min) {
+        c.data.addskills = false;
+        $rootScope.$broadcast("refresh_typeahead");
+        c.data.skill = skill;
+        c.data.action = 'click';
+        c.server.update().then(function(resp) {
+            skill.maxRating = resp.maxRating;
+            skill.previousRating = resp.givenRating;
+            if (skill.recommendedAction)
+                skill.givenRating = 1;
+            else
+                skill.givenRating = resp.givenRating;
+            skill.levels = resp.levels;
+            $scope.ratingChanged(skill, min);
+            c.updateButtonDisabled = true;
+            $scope.alignPopover(skill);
+        });
+        $('.skill-pill').tooltip('hide');
+    }
+
+    /*getting the rating which is selected by the user*/
+    $scope.selectingTheNewRating = function(levelVal, skill) {
+        c.data.skill = skill;
+        c.data.levelVal = levelVal;
+        c.data.action = 'validate';
+        c.server.update().then(function(resp) {
+            skill.maxRating = 0;
+            if (!skill.recommendedAction)
+                skill.proficiency.value = resp.levelVal;
+            skill.skillLevel = resp.levelVal;
+            skill.previousRating = skill.givenRating;
+            skill.showLevelSlider = false;
+            if (parseInt(levelVal) === parseInt(c.data.levelTypeMax[skill.levelTypeId]))
+                skill.isHighestLevel = true;
+            else
+                skill.isHighestLevel = false;
+            skill.isValidated = false;
+            $scope.ratingChanged(skill, 1);
+            c.data.userSkills.sort((function(a, b) {
+                return (b.skillLevel || 0) - (a.skillLevel || 0)
+            }))
+            c.data.requiredSkills.sort((function(a, b) {
+                return (b.skillLevel || 0) - (a.skillLevel || 0)
+            }))
+        });
+        if (skill.recommendedAction)
+            $scope.addRecommendedSkills(skill);
+        skill.maxRating = 0;
+        skill.showLevelSlider = false;
+    };
+
+    $scope.closeSlider = function(skill) {
+        $scope.skillClicked(skill);
+        skill.showLevelSlider = false;
+    }
+
+    $window.addEventListener('click', function(event) {
+        if (document.getElementById('skillsbtn') !== event.target &amp;&amp; document.getElementById('input') !== event.target) {
+            c.data.addskills = false;
+            $rootScope.$broadcast("refresh_typeahead");
+        }
+    });
+
+    spUtil.recordWatch($scope, c.data.userManagedSkillTable, "active=true^employee_profile.user=" + c.data.userid, function(event, data) {
+        c.data.action = "refresh";
+        if ($scope.refresher) {
+            clearTimeout($scope.refresher);
+        }
+        $scope.refresher = setTimeout(function() {
+            spUtil.update($scope).then(function(resp) {
+                c.data.userSkills = resp.userSkills;
+                $scope.requiredSkills = resp.requiredSkills;
+                if ($scope.focusElement) {
+                    setTimeout(function() {
+                        var element = document.getElementById($scope.focusElement);
+                        element.focus();
+                        $scope.focusElement = null;
+                    }, 100);
+                }
+                $scope.refresher = null;
+            });
+        }, 1000);
+    });
+    var input = document.getElementById('attachFile');
+    input.addEventListener('change', validateSizeandSendFile);
+    var dropFiles;
+
+    /*Close modal and reeset resume upload*/
+    $scope.closeModal = function() {
+        extractedSkills = [];
+        c.unavailableSkillsMessage = "";
+        c.skill_header_msg = "";
+        c.showUnavailableSkillsAlert = false;
+        c.dragFile = true;
+        c.showDropMessage = true;
+        c.showSkills = false;
+        c.showSkillselection = false;
+        c.fileNotFound = false;
+        c.heading_above_image = "${Let’s discover your skills}"
+        c.subtitle_below_image = "${No skills have been added yet. Let’s get started!}";
+        c.button_name = "${Upload a resume}";
+        c.modal_title = "${Skills upload}";
+        c.modal_body_text_below_image = "${Supported file types: (Resume: .docx, .pdf, .txt) (LinkedIn: .zip)}";
+        c.loading = false;
+        c.newSkillsFound = false;
+        c.completionValue = 0;
+        $('.skillCheckbox').prop('checked', true);
+        input.value = null;
+        dropFiles = null;
+        var popovers = document.getElementsByClassName("popover");
+        if (popovers)
+            for (var i = 0; i &lt; popovers.length; i++) {
+                popovers[i].style.display = "none";
+            }
+        if ($location.search().src == 'pp') {
+            var params = $location.search();
+            delete params.src;
+            $location.search(params);
+        }
+        return;
+    }
+
+    $scope.closeOnEnter = function($event, id) {
+        if ($event.which === 13 || $event.keyCode === 13) {
+            setTimeout(function() {
+                var elem = document.getElementById(id);
+                elem.click();
+            });
+        }
+    }
+
+    /*To handle selection of skills from checkboxes*/
+    $scope.handleCheck = function($event) {
+        var checkbox = $event.target;
+        if (checkbox.checked == false)
+            checkbox.removeAttribute("checked");
+        else
+            checkbox.setAttribute("checked", "true");
+    }
+
+    $scope.getTrackId = function(index, id) {
+        return index + id;
+    }
+
+    /* Get all skill checkboxes selected by the user */
+    $scope.addMySkills = function(value) {
+        var selectedSkills = [];
+        if (c.data.filteredSkills &amp;&amp; value == "filteredSkills") {
+            selectedSkills = c.data.filteredSkills.filter(function(item) {
+                return item.checked;
+            }).map(function(item) {
+                var rating = 0;
+                if (item.levels &amp;&amp; item.levels.length &gt; 0 &amp;&amp; item.givenRating)
+                    rating = item.levels[item.givenRating].value;
+                return {
+                    sysId: item.sysId,
+                    givenRating: rating,
+                    levelTypeSysId: item.levelTypeSysId
+                };
+            });
+        }
+
+        if (c.data.roleLevelSkills &amp;&amp; value == "roleLevelSkills") {
+            selectedSkills = c.data.roleLevelSkills.filter(function(item) {
+                return item.checked;
+            }).map(function(item) {
+                var rating = 0;
+                if (item.levels &amp;&amp; item.levels.length &gt; 0 &amp;&amp; item.givenRating)
+                    rating = item.levels[item.givenRating].value;
+                return {
+                    sysId: item.sysId,
+                    givenRating: rating,
+                    levelTypeSysId: item.levelTypeSysId
+                };
+            });
+        }
+        if (selectedSkills.length == 0) {
+            $scope.showLater();
+            return;
+        }
+        c.data.action = 'addResumeSkills';
+        c.data.selectedSkills = selectedSkills;
+        c.server.update().then(function(resp) {
+            c.data.action = "refresh";
+            c.server.update().then(function(resp) {
+                c.data.userSkills = resp.userSkills;
+                c.completionValue = 100;
+                $scope.requiredSkills = resp.requiredSkills;
+                $scope.closeModal();
+            });
+        });
+    }
+    /* Show selected skills later */
+    $scope.showLater = function() {
+        c.showSkillselection = true;
+        c.subtitle_below_image = "${It looks like you haven't finished adding your skills. Would you like to continue?}";
+        c.button_name = "${Continue adding skills}";
+    }
+    $scope.toggleAll = function() {
+        var toggleStatus = c.isAllSelected;
+        if (c.data.filteredSkills)
+            c.data.filteredSkills.forEach(function(item) {
+                item.checked = toggleStatus;
+            });
+        if (c.data.roleLevelSkills)
+            c.data.roleLevelSkills.forEach(function(item) {
+                if (!item.required)
+                    item.checked = toggleStatus;
+            });
+    }
+    $scope.optionToggled = function(value) {
+        if (c.data.filteredSkills &amp;&amp; value == 'filteredSkills')
+            c.isAllSelected = c.data.filteredSkills.every(function(item) {
+                return item.checked;
+            });
+        if (c.data.roleLevelSkills &amp;&amp; value == 'roleLevelSkills') {
+            c.isAllSelected = c.data.roleLevelSkills.filter(function(item) {
+                return !item.required;
+            }).every(function(item) {
+                return item.checked;
+            });
+        }
+    }
+    /* Validate size of uploaded file and submit to skill extraction API*/
+    function validateSizeandSendFile(event) {
+        var file;
+        c.showSkillselection = false;
+        c.fileNotFound = false;
+        c.showSkills = false;
+        c.fileType = "${Resume}";
+        c.isZip = false;
+        if ((input.value == null || input.files[0] == undefined) &amp;&amp; !dropFiles)
+            return;
+        if (dropFiles)
+            file = dropFiles.files
+        if (input.files[0])
+            file = input.files
+        var fileExtension = file[0].name.split('.').pop();
+        if (!supportedFileTypes.includes(fileExtension)) {
+            document.getElementById('closeicon').click();
+            spModal.alert(c.data.unSupportedFileTypeMessage.withValues([fileExtension]));
+            return;
+        }
+        var allowedSize = c.data.maxfilesize * 1048576;
+        if (file[0].size &gt; allowedSize &amp;&amp; allowedSize != 0) {
+            document.getElementById('closeicon').click();
+            spModal.alert("${File is larger than the maximum file size.}\n${Maximum file size: }" + c.data.maxfilesize + "MB");
+            input.value = null;
+            dropFiles = null;
+            return;
+        } else {
+            if (file[0].type === "application/zip")
+                c.skill_header_msg = linkedInHeaderMsg;
+            else
+                c.skill_header_msg = resumeHeaderMsg;
+            c.dragFile = false;
+            c.loading = true;
+            c.modal_body_text_below_image = "${Finding your career details...}";
+            c.showDropMessage = false;
+            spUtil.update($scope);
+            c.data.file = true;
+            var fileReader = new FileReader();
+            if (file[0].type == "application/pdf") {
+                fileReader.onload = function() {
+                    new Pdf2TextClass().pdfToText(fileReader.result, null, function(text) {
+                        sendfile(text)
+                    });
+                }
+                fileReader.readAsDataURL(file[0]);
+            } else if (file[0].type === "application/zip") {
+                c.isZip = true;
+                JSZip.loadAsync(file[0]).then(zip =&gt; {
+                    let skillText = "";
+                    const promises = [];
+                    let skillsFromSkillCSV = [];
+                    zip.forEach((relativePath, zipEntry) =&gt; {
+                        if (zipEntry.name.includes("Positions.csv")) {
+                            let skillsFromPositionsCSVPromise = $scope.parsePositions(zipEntry);
+                            skillsFromPositionsCSVPromise.then(positions =&gt; {
+                                if (positions.description) {
+                                    skillText += JSON.stringify(positions.description);
+                                }
+                            });
+                            promises.push(skillsFromPositionsCSVPromise);
+                        } else if (zipEntry.name.includes("Skills.csv")) {
+                            let skillsFromSkillsCSVPromise = $scope.parseSkills(zipEntry);
+                            skillsFromSkillsCSVPromise.then(skills =&gt; {
+                                skillsFromSkillCSV = skills;
+                                skillText += JSON.stringify(skills);
+                            });
+                            promises.push(skillsFromSkillsCSVPromise);
+                        }
+                    });
+                    if (promises.length &gt; 0)
+                        Promise.all(promises).then(() =&gt; {
+                            sendfile(skillText).then(function() {
+                                if (extractedSkills.length &gt; 0) {
+                                    var unavailableSkills = skillsFromSkillCSV.filter(function(skillName) {
+                                        //return the skills present in profile but not available in our database yet
+                                        return !extractedSkills.find(function(extractedSkill) {
+                                            //compare skill names case insensitively
+                                            return (extractedSkill.name.localeCompare(skillName, undefined, {
+                                                sensitivity: 'accent'
+                                            }) === 0);
+                                        });
+                                    });
+                                    //we will only show max of 3 skills in the message
+                                    let len = Math.min(3, unavailableSkills.length);
+                                    if (len &gt; 0) {
+                                        let msg = "";
+                                        //sort the skills as per skill name
+                                        unavailableSkills.sort(function(a, b) {
+                                            return a.localeCompare(b);
+                                        });
+                                        for (let i = 0; i &lt; len; i++) {
+                                            msg = msg.concat(unavailableSkills[i]);
+                                            msg = i != len - 1 ? msg.concat(', ') : msg;
+                                        }
+                                        if (unavailableSkills.length &gt; 3)
+                                            msg = msg.concat(', +').concat((unavailableSkills.length - 3).toString()).concat("${ other skills}");
+                                        c.unavailableSkillsMessage = msg;
+                                        c.showUnavailableSkillsAlert = true;
+                                    }
+                                }
+                            });
+                        })
+                })
+                c.fileType = "${LinkedIn .zip}";
+            } else if (file[0].type.includes('document')) {
+                fileReader.readAsArrayBuffer(file.item(0));
+                fileReader.onload = function(evt) {
+                    var text = $scope.docx2Text(evt);
+                    sendfile(text);
+                }
+            } else {
+                fileReader.readAsText(file[0]);
+                fileReader.onload = function() {
+                    sendfile(fileReader.result);
+                }
+            }
+        }
+        c.fileNotFound = !c.fileNotFound;
+    }
+    /* Function to send extracted text to ML API..*/
+    function sendfile(resumeFile) {
+        c.fileNotFound = !c.fileNotFound;
+        var blob = new Blob([resumeFile]);
+        var textSizeInMB = blob.size / 1048576;
+        if (textSizeInMB &gt; 1) {
+            document.getElementById('closeicon').click();
+            spModal.alert("${Oops! Your resume file exceeds the maximum size. Please upload a smaller file or try uploading one page at a time.}");
+            return;
+        }
+        if (!resumeFile || resumeFile.trim().length === 0) {
+            document.getElementById('closeicon').click();
+            spModal.alert("${File doesn't contain any text.}");
+            input.value = null;
+            return;
+        }
+        var resume = {
+            extractedResumeText: resumeFile,
+            action: 'extractedResumeText'
+        };
+        return c.server.get(resume).then(function(resp) {
+            if (c.loading) {
+                c.modal_title = "${Review skills}";
+                if (resp.data.error &amp;&amp; resp.data.error.includes('400')) {
+                    setTimeout(function() {
+                        c.loading = false;
+                        document.getElementById('closeicon').click();
+                        spModal.alert("${Oops! The system is taking longer than expected and cannot process your file. Please try uploading a smaller file or retry later.}");
+                        return;
+                    });
+                } else {
+                    if (resp.data.hasOwnProperty('extractedResults')) {
+                        extractedSkills = resp.data.extractedResults;
+                        var filteredSkills = resp.data.extractedResults.filter(function(skill) {
+                            return !c.data.userSkills.find(function(rec) {
+                                return rec.skillSysId === skill.sysId;
+                            });
+                        });
+                        if ($scope.requiredSkills.length &gt; 0) {
+                            filteredSkills = filteredSkills.filter(function(skill) {
+                                return !$scope.requiredSkills.find(function(rec) {
+                                    return rec.skillSysId === skill.sysId;
+                                });
+                            });
+                        }
+                        c.isAllSelected = true;
+                        var toggleStatus = c.isAllSelected;
+                        filteredSkills.forEach(function(item) {
+                            item.checked = toggleStatus;
+                            item.givenRating = 1;
+                            $scope.ratingChanged(item, 1, true);
+                        });
+                        filteredSkills.sort(function(a, b) {
+                            return a.name.localeCompare(b.name);
+                        });
+                        c.data.filteredSkills = filteredSkills;
+                        if (c.data.filteredSkills.length == 0)
+                            c.newSkillsFound = false;
+                        else
+                            c.newSkillsFound = true;
+                        c.completionValue = 50;
+                        c.showSkillselection = true;
+                        c.showSkills = true;
+                        c.loading = false;
+                        var closeIcon = document.getElementById('closeicon');
+                        if (closeIcon)
+                            closeIcon.focus();
+                    } else
+                        c.newSkillsFound = false;
+                    c.completionValue = 50;
+                    c.showSkillselection = true;
+                    c.showSkills = true;
+                    c.loading = false;
+                }
+            }
+        })
+    }
+    $scope.showLeaveConfirmationModal = function(skillsModal) {
+        if (skillsModal == true) {
+            event.stopPropagation();
+            $('#leavePageModal').modal('show');
+            $('#leavePageModal').on('click', '.btn.btn-danger[primary="true"]', function() {
+                $('#attachModal').modal('hide');
+                $('#leavePageModal').modal('hide');
+                c.data.action = 'cleanExtractedSkills';
+                c.server.update().then(function() {
+                    $scope.closeModal();
+                });
+            });
+            $('#leavePageModal').on('click', '.btn.btn-default[cancel="true"]', function() {
+                $('#leavePageModal').modal('hide');
+            });
+        } else
+            $scope.closeModal();
+    }
+
+    $scope.focusNextElement = function(skill) {
+        console.log(skill.id);
+        setTimeout(function() {
+            var nextFocusElement = document.getElementById("pillId-" + skill.id).parentElement.parentElement.nextElementSibling;
+            if (nextFocusElement != null)
+                nextFocusElement = nextFocusElement.querySelector('div.dropdown');
+            if (nextFocusElement) {
+                $scope.focusElement = nextFocusElement.id;
+            }
+            if ($scope.focusElement) {
+
+                var element = document.getElementById($scope.focusElement);
+                element.focus();
+                $scope.focusElement = null;
+            }
+        }, 50);
+    }
+    $scope.getUpdatedContent = function(value) {
+        if (value) {
+            c.data.limit = c.data.userSkills.length;
+            c.data.showMore = false;
+            var skill = c.data.userSkills[19];
+            $scope.focusNextElement(skill);
+        } else {
+            setTimeout(function() {
+                var focusShowMore = document.getElementById("showMore");
+                if (focusShowMore)
+                    focusShowMore.focus();
+            }, 10);
+            c.data.limit = c.data.numberOfSkills;
+            c.data.showMore = true;
+        }
+    };
+    /*Drop event handler*/
+    $window.onFileDrop = function(event) {
+        event.preventDefault();
+        dropFiles = document.getElementById('dropFile');
+        dropFiles.files = event.dataTransfer.files;
+        if (dropFiles.files.length &gt; 1) {
+            document.getElementById('closeicon').click();
+            spModal.alert("${Only 1 file can be imported at a time.}");
+            return;
+        }
+        var fileExtention = event.dataTransfer.files[0].name.split('.').pop();
+        if (supportedFileTypes.includes(fileExtention)) {
+            c.dragFile = false;
+            validateSizeandSendFile();
+        } else {
+            document.getElementById('closeicon').click();
+            spModal.alert(c.data.unSupportedFileTypeMessage.withValues([fileExtention]));
+        }
+    };
+    /*DragOver event handler for resume upload*/
+    $window.allowDrop = function(event) {
+        if (c.dragFile) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+        }
+    };
+    /*Extract text from docx resume file*/
+    $scope.docx2Text = function(evt) {
+        var content = evt.target.result;
+        var zip = new PizZip(content);
+        var doc = new window.docxtemplater(zip, {
+            linebreaks: true
+        });
+        var text = doc.getFullText();
+        return text;
+    }
+    /* Function to extract text from pdf skills*/
+    function Pdf2TextClass() {
+        var self = this;
+        this.complete = 0;
+        this.pdfToText = function(data, callbackPageDone, callbackAllDone) {
+            var loadingTask = pdfjsLib.getDocument(data);
+            loadingTask.promise.then(function(pdf) {
+                var total = pdf._pdfInfo.numPages;
+                var layers = {};
+                for (i = 1; i &lt;= total; i++) {
+                    pdf.getPage(i).then(function(page) {
+                        var pageNumber = page.pageNumber;
+                        page.getTextContent().then(function(textContent) {
+                            if (textContent.items) {
+                                var page_text = "";
+                                var last_block = null;
+                                for (k = 0; k &lt; textContent.items.length; k++) {
+                                    var block = textContent.items[k];
+                                    if (last_block != null &amp;&amp; last_block.str[last_block.str.length - 1] != ' ') {
+                                        if (block.x &lt; last_block.x)
+                                            page_text = page_text + "\r\n";
+                                        else if (last_block.y != block.y &amp;&amp; (last_block.str.match(/^(\s?[a-zA-Z])$|^(.+\s[a-zA-Z])$/) == null))
+                                            page_text = page_text + ' ';
+                                    }
+                                    page_text = page_text + block.str;
+                                    last_block = block;
+                                }
+                                layers[pageNumber] = page_text + "\n\n";
+                            }
+                            self.complete = self.complete + 1;
+                            if (self.complete == total) {
+                                var full_text = "";
+                                var num_pages = Object.keys(layers).length;
+                                for (j = 1; j &lt;= num_pages; j++)
+                                    full_text = full_text + layers[j];
+                                callbackAllDone(full_text);
+                            }
+                        });
+                    });
+                }
+            });
+        };
+    };
+    $scope.noTitles = function(maxrating) {
+        c.overStar = null;
+        return Array.apply(null, Array(maxrating)).map(function() {
+            return '';
+        });
+    }
+    $scope.hoveringOver = function(value) {
+        c.tooltip = true;
+        c.overStar = $sce.trustAsHtml(c.data.levelsLabel[value - 1]);
+    };
+    /* 
+     * This method takes a csv string and converts it into an array of objects.
+     * @param csvText - csv file extracted as a string
+     * @return array of objects where each object represents each row and each
+     * object has keys as headers and values as corresponding values
+     */
+    function csvToArray(csvText) {
+        let previousChar = '';
+        let currentRow = [''];
+        let result = [];
+        let currentIndex = 0;
+        let headers = [];
+        let isInQuote = true;
+        let character;
+        for (character of csvText) { //Skipping characters like comma, \n if they are present within a value inside doubleqoutes
+            if (character === '"') {
+                if (isInQuote &amp;&amp; character === previousChar)
+                    currentRow[currentIndex] += character;
+                isInQuote = !isInQuote;
+            } else if (character === ',' &amp;&amp; isInQuote)
+                character = currentRow[++currentIndex] = '';
+            else if (character === '\n' &amp;&amp; isInQuote) {
+                if (previousChar === '\r')
+                    currentRow[currentIndex] = currentRow[currentIndex].slice(0, -1);
+                if (!headers.length)
+                    headers = currentRow;
+                else {
+                    // create an object from the row data
+                    let obj = {};
+                    for (let i = 0; i &lt; headers.length; i++)
+                        obj[headers[i]] = currentRow[i];
+                    result.push(obj);
+                }
+                currentRow = [character = ''];
+                currentIndex = 0;
+            } else
+                currentRow[currentIndex] += character;
+            previousChar = character;
+        }
+        return result;
+    }
+
+    $scope.parseSkills = zipEntry =&gt; {
+        let skills = [];
+        return zipEntry.async('text').then(csvData =&gt; {
+            const lines = csvToArray(csvData);
+            for (let i = 0; i &lt; lines.length; i++)
+                if (lines[i]['Name'])
+                    skills.push(lines[i]['Name'].trim());
+            return skills;
+        });
+    };
+
+    $scope.parsePositions = zipEntry =&gt; {
+        const workHistoryDescription = [];
+        return zipEntry.async('text').then(csvData =&gt; {
+            const lines = csvToArray(csvData);
+            for (let i = 0; i &lt; lines.length; i++)
+                if (lines[i].Description)
+                    workHistoryDescription.push(lines[i].Description)
+            return {
+                description: workHistoryDescription
+            };
+        });
+    }
+    $scope.closeUnavailableSkillsAlert = function() {
+        c.showUnavailableSkillsAlert = false;
+    };
+
+    $window.addEventListener('popstate', () =&gt; {
+        $scope.closeModal();
+        for(let e of document.getElementsByClassName("modal-backdrop")) {
+            e.remove();
+        }
+    });
+
+}]]&gt;&lt;/client_script&gt;&lt;controller_as&gt;c&lt;/controller_as&gt;&lt;css&gt;.skill {
+  display:flex;
+  gap:10px;
+  flex-wrap: wrap;
+  font-size:$font-size-base;	
+}
+
+.table-row:nth-child(even) {
+  background-color : $background-primary;
+}
+
+.skill-lists-wrapper div:first-of-type &amp;gt; hr:first-of-type {
+  margin-left: -2.4rem;
+  margin-right: -2.4rem;
+}
+.skillContainer .row {
+  padding: 10px 0;
+  margin: 0;
+}
+
+.popover-content {
+	background-color:$background-secondary;  
+}
+
+.popover {
+    right: auto; 
+}
+
+.skill-section-subtitle {
+  margin-top: 12px;
+}
+
+.skillTableContainer .row {
+  padding: 10px 0;
+  margin: 0;
+}
+.si-footer{
+  z-index: 9999 !important;
+}
+
+.career-hub-link {
+  margin-top: -4.6rem;
+  margin-left: 2rem;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+.fa-fw {
+  color: $text-primary;
+}
+.noskill {
+  display: flex;
+  margin-top: 20%;
+  flex-direction: column;
+  align-items: center;
+  background: #FFFFFF;
+  padding-left: 10%;
+  padding-top: 5%;
+  padding-bottom: 5%;
+}
+
+.noskillmsg {
+  font-family: Lato;
+  font-size: 16px;
+  font-weight: 100;
+  color: #474D5A;
+}
+
+.fileuploaded {
+  font-family: Lato;
+  font-size: 14px;
+  font-weight: 100;
+  color: #474D5A;
+}
+
+.uploadotherfile {
+  font-family: Lato;
+  font-size: 14px;
+  font-weight: 100;
+  cursor: pointer;
+}
+
+.level-value.content .popover-content {
+  padding-top: 0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  width: 243px;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
+  overflow-x: hidden;
+}
+
+@media screen and (max-width: 750px) {
+  .level-value.content .popover-content {
+    padding-top: 0.5rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    width: 150px;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    text-overflow: ellipsis;
+  }
+}
+
+.si-footer {
+  background-color: $background-tertiary;
+
+  .progress-bar {
+    background-color: $brand-primary;
+  }
+}
+
+@media (max-width: 767px) {
+  .full-width {
+    flex-direction: column;
+
+    .btn {
+      margin-left: 0px;
+    }
+  }
+}
+
+#roleLevelSkillsModal.modal-fullpage {
+  padding-left: 0 !important;
+}
+
+#attachModal.modal-fullpage {
+  padding-left: 0 !important;
+}
+
+.modal-content::-webkit-scrollbar {
+  display: none;
+}
+
+#attachModal {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: scroll;
+
+  .modal-content {
+    height: auto;
+    max-height: 100vh;
+    overflow-y: auto;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .modal-content {
+    width: 100%;
+    background: $background-secondary;
+    .modal-body.full-height {
+      height: 100%
+    }
+
+    .modal-body {
+      border: none;
+      min-height: calc(100vh - 100px);
+      align-items: center;
+      justify-content: center;
+      padding: 30px 0;
+      margin-bottom: 100px;
+    }
+
+    @media (max-width: 767px) {
+      button.close {
+        top: 0 !important;
+        right: 0 !important;
+      }
+    }
+.upload-info {
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  background: $background-primary; 
+  padding-left: 10%; 
+  padding-right: 10%; 
+  padding-top: 5%; 
+  padding-bottom: 5%;
+}
+.skills-container {
+	background: $background-secondary; 
+  padding-top: 8%; 
+  top: 20%; 
+  width: 100%;  
+}
+.upload-steps-text {
+	  color: $text-secondary;
+}
+.supported-files {
+  font: 'Lato'; 
+  font-size: 100%; 
+  font-weight: 100; 
+  color: $text-secondary;
+}
+.step-text {
+  font: 'Lato'; 
+  font-size: 112%; 
+  font-weight: 400; 
+  color: $text-secondary;
+} 
+    button.close {
+      position: fixed;
+      right: 24px;
+      top: 24px;
+      z-index: 1;
+      padding: 12px;
+    }
+
+    .modal-footer {
+      border: none;
+    }
+  }
+}
+
+.upload-steps {
+	display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  padding-left: 10%; 
+  padding-right: 10%; 
+  padding-top: 5%; 
+  padding-bottom: 5%; 
+  background: $background-primary; 
+  margin-top: 3%;
+}
+
+#roleLevelSkillsModal {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: scroll;
+
+  .modal-content {
+    height: auto;
+    max-height: 100vh;
+    overflow-y: auto;
+    -ms-overflow-style: none;
+  }
+
+  .modal-content {
+    width: 100%;
+
+    .modal-body.full-height {
+      height: 100%
+    }
+
+    .modal-body {
+      border: none;
+      min-height: calc(100vh - 100px);
+      align-items: center;
+      justify-content: center;
+      padding: 30px 0;
+      padding-bottom: 100px;
+    }
+
+    @media (max-width: 767px) {
+      button.close {
+        top: 0 !important;
+        right: 0 !important;
+      }
+    }
+    button.close {
+      position: fixed;
+      right: 24px;
+      top: 24px;
+      z-index: 1;
+      padding: 12px;
+    }
+
+    .modal-footer {
+      border: none;
+    }
+  }
+}
+
+.panel-heading {
+  border:none;
+}
+
+.panel-body {
+  padding-top:0px;
+  padding-bottom:20px;
+}
+
+.skill-pill {
+  align-items: center;
+  padding: 6.5px 16px;
+  background-color:#A0E4EF;
+  border-radius:16px; 
+  font-weight:400
+}
+
+.empty-skill-message {
+  margin-top:18px;
+  color: #181A1F;
+}
+
+.empty-skill-subtitle {
+  margin-top:18px;
+  color: #474D5A;
+}
+
+.tabledata .skill-pill .input-label {
+  cursor: pointer;
+  margin-bottom: 0px;
+}
+.empty-skill-button {
+  margin-top:20px;
+  margin-bottom:14px
+}
+
+.resume-button {
+  margin-top:10px;
+  margin-bottom:14px;
+  border: 1px solid #4F52BD;
+  background-color: #FFFFFF;
+  color: #4F52BD;
+}
+
+.custom-focus:focus {
+  border: 2px solid #4F52BD;
+}
+
+.add-skill {
+  margin-top: -24px;
+  padding-top: 24px;
+  margin-bottom: 8px;
+}
+
+img {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.modalPosition {
+  outline : none;
+}
+
+.modalTitle {
+  font-size: 17px !important;
+  font-weight: 600;
+  letter-spacing: 0;
+  padding-top: 10px;
+  text-align: left;
+  color: black;
+}
+
+.modalHeader {
+  border-bottom: 0px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+} 
+
+.heading {
+  font-family: 'Lato;
+    align-items: center;
+  padding: 5px;
+  display: block;
+}
+
+.text-muted {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.icon-cross:before {
+  content: "\f153";
+  font-size: 6px;
+  height: 13px;
+  width: 13px;
+  background: #000000;
+  border-radius: 50%;
+  color: white;
+  line-height: 2;
+} 
+
+.fa-close {
+  margin-top: 20px;
+}
+
+.mt-10{
+  margin-top: 10px;
+}
+
+.now-progress-bar-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+}
+
+.progress-bar {
+  height:13px;
+}
+
+.skillCheckbox {
+  accent-color: #4F52BD;
+}
+
+.skillCheckbox.true {
+  accent-color: #7E8592;
+}
+
+.multi-line-text {
+  overflow-wrap: break-word;
+  white-space: normal;
+
+}
+
+hr {
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
+.tabledata .skill-pill{
+  display: inline-block;
+  text-align: left;
+  max-width:120px;
+}
+@media (min-width: 410px) {
+  .tabledata .skill-pill {
+    max-width:150px;
+  }
+}
+@media (max-width: 899px) {
+  .ratingcontainer .level-slider .show-value.max {
+    transform: translateX(-95%);
+  }
+  .ratingcontainer .level-slider .show-value.max:after {
+    left: 90%;
+  }
+}
+@media (max-width: 600px) {
+  .ratingcontainer .level-slider {
+    width: 140px !important;
+  }
+  .ratingcontainer .level-slider input[type=range] {
+    width: 140px !important;
+    background-position-x: calc(100% - 140px);
+  }
+}
+@media (min-width: 500px) {
+  .tabledata .skill-pill {
+    max-width:240px;
+  }
+}
+@media (min-width: 600px) {
+  .tabledata .skill-pill {
+    max-width:280px;
+  }
+}
+@media (min-width: 700px) {
+  .tabledata .skill-pill {
+    max-width:300px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .tabledata .skill-pill {
+    max-width:550px;
+  }
+}
+
+@media (min-width: 900px) {
+  .tabledata .ratingcontainer {
+    min-width: 250px;
+  }
+}
+
+.input-checkbox input:checked {
+  background: #4f52bd ! important;
+  border: 0.1rem solid #4f52bd !important;
+}}
+.no-access-message {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 23px;
+  text-align: center;
+}
+
+.skill-box {
+  display:flex;
+  flex: 1 1 auto;
+  left: 749px;
+  top: 112px;
+  background: #E4E6EA;
+  mix-blend-mode: multiply;
+}
+
+.rating {
+  float: right;
+}
+
+.fa-circle-on {
+  color: $brand-primary !important;
+  border: black;
+  text-shadow: $fav-star-outline;
+  padding: 2px;
+}
+
+.fa-circle-off {
+  color: white !important;
+  border: black;
+  text-shadow: $fav-star-outline;
+  padding: 2px;
+}
+
+.user-Skills-footer {
+  display: flex;
+  margin-top:7px;
+  font-size: 16px;
+}
+
+table {
+  font-family: Lato, sans-serif;
+  width: 100%;
+}
+
+td, th {
+  text-align: left;
+  padding: 2px;
+} 
+
+#attachModal .tabledata tr:nth-child(even) {
+  background-color: #FFFFFF;
+}
+
+#roleLevelSkillsModal .tabledata tr:nth-child(odd) {
+  background-color: #E4E6EA;
+}
+
+.tabledata .rating {
+  float: left;
+  padding-left: 10px;
+}
+
+.tabledata .rating:focus {
+  border: none;
+  box-shadow: none;
+} 
+
+.tabledata td {
+  padding: 6.5px;
+}
+
+.reviewskillstable th {
+  padding: 6.5px;
+}
+
+.reviewskillstable .checkboxheader {
+  width: 15px;
+}
+
+.skillContainer .table-head {
+  top: 0;
+  background : $background-secondary;
+}
+
+.skillTableContainer .reviewskillstable thead tr {
+  position: sticky;
+  top: 0;
+  z-index:1;
+  background: white;
+}
+.skill-section-header {
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: space-between;
+  align-items: center;
+}
+.tooltip.customClass .tooltip-inner {
+  position: relative;
+  color: black;
+  background-color: white;
+  text-align: left;
+  border-radius:16px; 
+  padding: 5px 10px;
+  border: 2px groove #B0B5BF;
+
+}
+
+.tooltip.in {
+  opacity: 1;
+  filter:alpha(opacity=100);
+}
+
+.tooltip.customClass .tooltip-arrow {
+  display: none;
+}
+
+.panel-title {
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: 18px;
+  color: inherit;
+}
+
+.required-skills .heading {
+  padding: 16px 0;
+}
+
+.tooltip.top .tooltip-inner {
+  background-color:white;
+  color:black;
+  text-align: left;
+  border-radius:12px; 
+  padding: 8px 16px;
+  border: groove white;
+  align-self:stretch;
+  flex:none;
+  order:0;
+
+}
+
+.tooltip.bottom .tooltip-arrow {
+  border-bottom-color:white; 
+}
+
+.slider-buttons {
+	float: right;
+  padding-bottom: 9px;
+}
+
+.level-slider {
+  position: relative;
+  width: 200px;
+  /* Removes default focus */
+  /***** Chrome, Safari, Opera and Edge Chromium styles *****/
+  /* slider track */
+  /* slider thumb */
+  /******** Firefox styles ********/
+}
+.level-slider .show-value {
+  position: absolute;
+  top: 22px;
+  left: 10px;
+  transform: translateX(-50%);
+  background: #000000;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+  opacity: 0;
+}
+.level-slider .show-value:after {
+  content: "";
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  background: #000000;
+  top: -1px;
+  left: 50%;
+}
+.level-slider:hover .show-value {
+  opacity: 1;
+}
+.level-slider input[type=range]:focus + .show-value {
+  opacity: 1;
+}
+.level-slider-container {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.popover-content .level-slider-container {
+  margin-bottom: 16px;
+}
+.level-slider-container .btn-link, .level-slider-container a {
+  color: #181A1F;
+}
+.level-slider-container output {
+  padding-top: 0;
+}
+.level-slider input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  background-color: $background-primary;
+  cursor: pointer;
+  width: 200px;
+  background-image: url("sn_skills_int.level-slider.png");
+  background-position-x: calc(100% - 200px);
+  background-position-y: center;
+  background-repeat: no-repeat;
+  border-radius: 8px;
+  border: 1px solid #8790A1;
+  background-size: cover;
+  height: 15px;
+}
+.level-slider input[type=range][disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+.level-slider input[type=range]:focus {
+  outline: none;
+  box-shadow: none;
+}
+.level-slider input[type=range]::-webkit-slider-runnable-track {
+  background-color: transparent;
+  border-radius: 8px;
+  height: 12px;
+}
+
+.level-slider input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  /* Override default look */
+  appearance: none;
+  margin-top: -7px;
+  /* Centers thumb on the track */
+  /*custom styles*/
+  background: linear-gradient(to right, #dadde2 0%, white 100%);
+  border-radius: 4px;
+  border: 1px solid #8790A1;
+  height: 24px;
+  width: 16px;
+}
+.level-slider input[type=range]:focus::-webkit-slider-thumb {
+  border: 1px solid #3c59e7;
+  outline: 1px solid #3c59e7;
+}
+.level-slider input[type=range]::-moz-range-track {
+  background-color: transparent;
+  border-radius: 8px;
+  height: 12px;
+}
+.level-slider input[type=range]::-moz-range-thumb {
+  border: 1px solid #8790A1;
+  border-radius: 4px;
+  background-color: #ffffff;
+  height: 24px;
+  width: 16px;
+}
+.level-slider input[type=range]:focus::-moz-range-thumb {
+  border: 1px solid #3c59e7;
+  outline: 1px solid #3c59e7;
+}
+
+.skill-pills-container .rating-popover {
+  top: auto;
+  left: auto;
+}
+
+.skill-pills-container {
+  margin-top:24px;
+  margin-bottom:24px;
+}
+
+.popover-content .btn-link {
+  color: #181A1F;
+  margin-right: -4px;
+  margin-top: -4px;
+}
+.popover-content .title {
+  color: #656E81;
+  font-size: 14px;
+  padding-bottom: 8px;
+}
+.popover-content .desc {
+  font-style: italic;
+}
+.level-slider label {
+  position: absolute;
+  left: -999em;
+}
+.popover-title {
+  color: #656E81;
+  font-size: 14px;
+  background-color: transparent;
+}
+
+.steps {
+  display: flex;
+}
+
+.step {
+  font-family: 'Lato';
+  flex: 33.33%;
+  text-align: center;
+  padding: 2%;
+}
+
+.file-loading {
+  margin-top: 20%;
+}
+
+.unavailable-skills-alert {
+  font-family: 'Lato';
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.unavailable-skills-alert-message {
+  padding: 1%;
+  flex-grow: 1;
+}
+
+.skillContainer .skill-check-box {
+	width: auto;
+  height: auto;
+}
+
+.popover-max-width .popover-content {
+  max-width: 276px;
+}
+&lt;/css&gt;&lt;data_table&gt;sp_instance&lt;/data_table&gt;&lt;demo_data/&gt;&lt;description/&gt;&lt;docs/&gt;&lt;field_list/&gt;&lt;has_preview&gt;false&lt;/has_preview&gt;&lt;id&gt;user-skills&lt;/id&gt;&lt;internal&gt;false&lt;/internal&gt;&lt;link&gt;&lt;![CDATA[function link(scope, element, attrs, controller) {
+
+}]]&gt;&lt;/link&gt;&lt;name&gt;User Skills&lt;/name&gt;&lt;option_schema&gt;[{"name":"title","section":"Data","label":"Title","type":"string"},{"name":"use_attach_modal_only","section":"Data","label":"Use attach modal only","type":"boolean"},{"hint":"Show required skills section","name":"required_section_show","section":"Behavior","default_value":"true","label":"Show required skills section","type":"boolean"},{"hint":"Required skills section closed","name":"required_section_closed","section":"Behavior","default_value":"false","label":"Required skills section closed","type":"boolean"},{"hint":"Required section heading","name":"required_section_heading","section":"Presentation","default_value":"","label":"Required skills section heading","type":"string"},{"hint":"Required section sub heading","name":"required_section_sub_heading","section":"Presentation","default_value":"","label":"Required skills section sub heading","type":"string"},{"hint":"Show additional skills section","name":"additional_section_show","section":"Behavior","default_value":"true","label":"Show Additional skills section","type":"boolean"},{"hint":"Additional skills section closed","name":"additional_section_closed","section":"Behavior","default_value":"false","label":"Additional skills section closed","type":"boolean"},{"hint":"Additional skills section heading","name":"additional_section_heading","section":"Presentation","default_value":"","label":"Additional skills heading","type":"string"},{"hint":"Additional skills section sub heading","name":"additional_section_sub_heading","section":"Presentation","default_value":"","label":"Additional skills sub heading","type":"string"},{"hint":"Show Recommended skills section","name":"recommended_section_hide_show","section":"Behavior","default_value":"true","label":"Show Recommended skills section","type":"boolean"},{"hint":"Recommended skills section closed","name":"recommended_section_closed","section":"Behavior","default_value":"false","label":"Recommended skills section closed","type":"boolean"},{"hint":"Recommended skills section heading","name":"recommended_section_heading","section":"Presentation","default_value":"","label":"Recommended skills heading","type":"string"},{"hint":"Recommended skills section sub heading","name":"recommended_section_sub_heading","section":"Presentation","default_value":"","label":"Recommended skills sub heading","type":"string"},{"hint":"Show company value skills section","name":"company_value_section_show","section":"Behavior","default_value":"true","label":"Show company value skills section","type":"boolean"},{"hint":"Company value skills section closed","name":"company_value_section_closed","section":"Behavior","default_value":"true","label":"Company value skills section closed","type":"boolean"},{"hint":"Company value skills section heading","name":"company_value_section_heading","section":"Presentation","default_value":"","label":"Company value skills heading","type":"string"},{"hint":"Company value skills section sub heading","name":"company_value_section_sub_heading","section":"Presentation","default_value":"","label":"Company value skills sub heading","type":"string"},{"hint":"Show competencies section","name":"competencies_section_show","section":"Behavior","default_value":"true","label":"Show competencies section","type":"boolean"},{"hint":"Competencies section closed","name":"competencies_section_closed","section":"Behavior","default_value":"true","label":"Competencies section closed","type":"boolean"},{"hint":"Competencies section heading","name":"Competencies_section_heading","section":"Presentation","default_value":"","label":"Competencies heading","type":"string"},{"hint":"Competencies section sub heading","name":"competencies_section_sub_heading","section":"Presentation","default_value":"","label":"Competencies sub heading","type":"string"}]&lt;/option_schema&gt;&lt;public&gt;false&lt;/public&gt;&lt;roles&gt;sn_skills_int.admin,sn_skills_int.emp,sn_skills_int.manager&lt;/roles&gt;&lt;script&gt;&lt;![CDATA[(function() {
+    if (gs.getProperty('sn_skills_int.enable_skills') != 'false') {
+        data.showWidget = true;
+    } else {
+        data.showWidget = false;
+    }
+    data.userid = gs.getUserID();
+    data.title = options.widgetTitle || options.title || gs.getMessage('Skills');
+    data.useAttachModalOnly = options.use_attach_modal_only === 'true';
+    data.skillstypeahead = $sp.getWidget('add-skills');
+    var tabWidget = new GlideRecord("sn_employee_tab_widget_mapping");
+    tabWidget.addQuery("name", "Skills");
+    tabWidget.query();
+    if (tabWidget.next()) {
+        data.widgetId = "profile_widget_" + tabWidget.getValue("sys_id");
+    }
+    var userId = $sp.getParameter("sys_id");
+    data.canRead = true;
+    const MAX_CHARACTERS_INSIDE_POPOVER = 200;
+    data.maxfilesize = SkillConstants.MAXFILESIZE;
+    data.userManagedSkillTable = SkillConstants.USER_MANAGED_SKILLS;
+    data.numberOfSkills = SkillConstants.NUMBER_OF_SKILLS;
+    data.showSkillActionItems = (data.userid == $sp.getParameter("sys_id"));
+    data.unSupportedFileTypeMessage = gs.getMessage("File type '{0}' is not supported");
+    data.levelTypeMax = {};
+    data.showCareerHubLink = !!GlidePluginManager.isActive('sn_egd_core');
+    data.employeeCenterURLPrefix = new sn_ex_emp_fd.FoundationNotificationUtil().getPortalSuffix().toString();
+
+    var skillLevelGA = new GlideAggregate('cmn_skill_level');
+    skillLevelGA.groupBy('skill_level_type');
+    skillLevelGA.addAggregate('MAX', 'value');
+    skillLevelGA.query();
+    while (skillLevelGA.next())
+        data.levelTypeMax[skillLevelGA.skill_level_type] = skillLevelGA.getAggregate('MAX', 'value');
+    if (gs.nil(input) || (input &amp;&amp; input.action === "refresh")) {
+        data.userSkills = [];
+        data.requiredSkills = [];
+        data.showMore = input ? input.showMore : true;
+        data.hasRecordsToShow = false;
+        getUserSkill(data.levelTypeMax);
+        data.limit = data.showMore ? SkillConstants.NUMBER_OF_SKILLS : data.userSkills.length;
+    }
+    try {
+        //Getting the existing skill level of the perticular skill
+        if (input &amp;&amp; input.action === "click") {
+            data.skill = input.skill;
+            data.levels = [{
+                name: 'Unrated',
+                value: 0,
+                sysid: ''
+            }];
+            data.givenRating = 0;
+            var skillUtilsObj = new sn_skills_int.SkillIntUtils();
+            if (data.skill) {
+                try {
+                    if (data.skill.proficiency.value)
+                        data.givenRating = data.skill.proficiency.value;
+                } catch (exception) {
+                    var errorMsg = gs.getMessage('Exception occurred while editing user skill');
+                    gs.error(errorMsg);
+                    gs.error(exception);
+                }
+                data.levelId = data.skill.levelTypeId;
+
+                if (data.levelId) {
+                    var max = skillUtilsObj.getMaxProficiencyValue(data.levelId);
+                    data.maxRating = max.value;
+                    var skillLevels = skillUtilsObj.mapSkillLevelByValue(data.levelId);
+                    data.levels = data.levels.concat(JSON.parse(skillLevels));
+                    var pos = data.levels.map(function(it) {
+                        return it.sysid;
+                    }).indexOf(data.skill.proficiency.id);
+
+                }
+            }
+        }
+
+        //Adding skills from Recommended skill section to user profile
+        if (input &amp;&amp; input.action === "addRecommendedSkill") {
+            var gr = new GlideRecord('sn_skills_int_extracted_skill')
+            gr.addQuery('user', userId);
+            gr.addQuery('skill', "IN", input.skillId);
+            gr.query();
+            gr.added_to_profile = true;
+            gr.updateMultiple();
+            if (input.skillWithLevel)
+                new UserManagedSkillAssignment().assignManagedSkillToUser(userId, input.skillId, input.levelval);
+            else
+                new UserManagedSkillAssignment().assignManagedSkillToUser(userId, input.skillId);
+        }
+
+        //Gettinng the skills for the role level
+        if (input &amp;&amp; input.action === "fetchRoleLevelSkills") {
+            var roleLevelIds = new RoleLevelSkillsAPI().getEmployeeRoleLevelsByUserId(userId, true);
+            var skillsByRoleLevel = new RoleLevelSkillsUtils().getSkillsForRoleLevels(roleLevelIds);
+            data.roleTitle = skillsByRoleLevel[roleLevelIds[0]] ? skillsByRoleLevel[roleLevelIds[0]].title : '';
+            var roleBasedSkills = skillsByRoleLevel[roleLevelIds[0]] ? skillsByRoleLevel[roleLevelIds[0]].skills : [];
+            var skillUtils = new SkillIntUtils();
+            var userSkillObj = roleBasedSkills.map(function(item) {
+                return {
+                    sysId: item.id
+                };
+            });
+            var skillsDetail = skillUtils.fetchCMNSkills(userSkillObj, userId, true);
+            var lvlDetail = null;
+            if ("levelTypeDtl" in skillsDetail[skillsDetail.length - 1])
+                lvlDetail = skillsDetail.pop();
+            for (var n = 0; n &lt; skillsDetail.length; n++) {
+                var item = skillsDetail[n];
+                if (item) {
+                    var lvlTypeId = item.levelTypeSysId;
+                    var requiredItem = roleBasedSkills.filter(function(skill) {
+                        return item.sysId == skill.id &amp;&amp; skill.required == true;
+                    })
+                    if (requiredItem &amp;&amp; requiredItem.length &gt; 0)
+                        item.required = true;
+                    else
+                        item.required = false;
+                    if (lvlTypeId &amp;&amp; lvlDetail) {
+                        item.maxRating = parseInt(lvlDetail.levelTypeDtl[lvlTypeId].levelCount);
+                        item.levels = [{
+                            name: 'Unrated',
+                            value: 0,
+                            sysid: ''
+                        }];
+                        var skillLevels = skillUtils.mapSkillLevelByValue(lvlTypeId);
+                        item.levels = item.levels.concat(JSON.parse(skillLevels));
+                        item.givenRating = 0;
+                        if (item.userSkill &amp;&amp; item.userSkill.skillLevelValue) {
+                            var pos = item.levels.map(function(it) {
+                                return it.sysid;
+                            }).indexOf(item.userSkill.skillLevelSysId);
+                            item.givenRating = pos;
+                        }
+                    }
+                    if (item.levels &amp;&amp; Array.isArray(item.levels)) {
+                        for (var i = 0; i &lt; item.levels.length; i++) {
+                            var level = item.levels[i];
+                            if (level.description &amp;&amp; level.description.length &gt; MAX_CHARACTERS_INSIDE_POPOVER) {
+                                level.description = level.description.substring(0, MAX_CHARACTERS_INSIDE_POPOVER) + '...';
+                            }
+                        }
+                    }
+                }
+            }
+            data.roleSpecificSkills = skillsDetail;
+        }
+
+        //Updating the new skill level given by user from UI
+        if (input &amp;&amp; input.action === "validate") {
+            data.selectedSkill = input.skill;
+            data.levelVal = input.levelVal;
+            var skillUtil = new UserManagedSkillAssignment();
+            var skillDetails = skillUtil.assignManagedSkillToUser(userId, data.selectedSkill.id, data.selectedSkill.levels[data.selectedSkill.givenRating].sysid);
+        }
+        if (input &amp;&amp; input.action === "deleteSkill") {
+            var skillOperation = new sn_skills_int.UserManagedSkillAssignment();
+            var deleteSkillResponse = skillOperation.deleteUserManagedSkill(input.skillRecordId);
+            if (gs.nil(deleteSkillResponse.id))
+                gs.addErrorMessage(deleteSkillResponse.message);
+            else
+                gs.addInfoMessage(deleteSkillResponse.message);
+        }
+
+    } catch (exception) {
+        var errorMsg = gs.getMessage('Exception occurred while editing user skill');
+        gs.error(errorMsg);
+        gs.error(exception);
+    }
+
+    /* Assign all skills to user as selected in the review skills modal*/
+    if (input &amp;&amp; input.action === 'addResumeSkills') {
+        var i;
+        var selectedSkillsarray = input.selectedSkills.map(function(item) {
+            return item.sysId;
+        });
+        for (i = 0; i &lt; selectedSkillsarray.length; i++) {
+            new UserManagedSkillAssignment().assignManagedSkillToUser(userId, selectedSkillsarray[i]);
+        }
+
+        //Marking "Added to profile" as true in Extracted skills table
+        var gr = new GlideRecord('sn_skills_int_extracted_skill')
+        gr.addQuery('user', userId);
+        gr.addQuery('skill', "IN", selectedSkillsarray);
+        gr.query();
+        gr.added_to_profile = true;
+        gr.updateMultiple();
+        var ratingForSelectedSkills = input.selectedSkills;
+        var skillUtilObject = new SkillIntUtils();
+        for (var j = 0; j &lt; ratingForSelectedSkills.length; j++) {
+            var skillDetail = ratingForSelectedSkills[j];
+            var cmnSkillLvl = new GlideRecord(SkillConstants.CMN_SKILL_LEVEL);
+            if (skillDetail.levelTypeSysId) {
+                cmnSkillLvl.addQuery('skill_level_type', skillDetail.levelTypeSysId);
+                cmnSkillLvl.addQuery('value', skillDetail.givenRating);
+                cmnSkillLvl.query();
+                if (cmnSkillLvl.next()) {
+                    var lvlId = cmnSkillLvl.getUniqueValue();
+                    var updateRatingForSkill = new UserManagedSkillAssignment();
+                    updateRatingForSkill.assignManagedSkillToUser(userId, skillDetail.sysId, lvlId);
+                }
+            }
+        }
+    }
+
+    /* Extract skills from the resume */
+    if (input &amp;&amp; input.action === 'extractedResumeText') {
+        try {
+            var loggedInserId = userId;
+            var serachSkills = new SearchSkills();
+            var extractedResults = serachSkills.extractSkills(input.extractedResumeText, loggedInserId);
+            var levelDetail = null;
+            if ("levelTypeDtl" in extractedResults[extractedResults.length - 1])
+                levelDetail = extractedResults.pop();
+            var skillUtilsObj = new SkillIntUtils();
+            for (var k = 0; k &lt; extractedResults.length; k++) {
+                var item = extractedResults[k];
+                if (item) {
+                    var lvlTypeId = item.levelTypeSysId;
+                    if (lvlTypeId &amp;&amp; levelDetail) {
+                        item.maxRating = parseInt(levelDetail.levelTypeDtl[lvlTypeId].levelCount);
+                        item.levels = [{
+                            name: 'Unrated',
+                            value: 0,
+                            sysid: ''
+                        }];
+                        var skillLevels = skillUtilsObj.mapSkillLevelByValue(lvlTypeId);
+                        item.levels = item.levels.concat(JSON.parse(skillLevels));
+                    }
+                    if (item.levels &amp;&amp; Array.isArray(item.levels)) {
+                        for (var i = 0; i &lt; item.levels.length; i++) {
+                            var level = item.levels[i];
+                            if (level.description &amp;&amp; level.description.length &gt; MAX_CHARACTERS_INSIDE_POPOVER) {
+                                level.description = level.description.substring(0, MAX_CHARACTERS_INSIDE_POPOVER) + '...';
+                            }
+                        }
+                    }
+                }
+            }
+            data.extractedResults = extractedResults;
+        } catch (exception) {
+            var errorMsg = gs.getMessage("Exception occurred while extracting skills from resume.");
+            gs.error(errorMsg);
+            gs.error(exception);
+            data.error = exception.message;
+        }
+    }
+
+    if (input &amp;&amp; input.action === 'cleanExtractedSkills') {
+        var gr = new GlideRecord('sn_skills_int_extracted_skill');
+        gr.addQuery('user', userId);
+        gr.addQuery('source', 'RESUME');
+
+        // Add query to filter records for today's date..
+        gr.addEncodedQuery("sys_created_onONToday@javascript:gs.beginningOfToday()@javascript:gs.endOfToday()");
+        gr.query();
+
+        // Delete the matching records
+        while (gr.next()) {
+            gr.deleteMultiple();
+        }
+    }
+
+    function isGetUserHasSkillExist(userId, skill) {
+        var gr = new GlideRecord('sys_user_has_skill');
+        gr.addQuery('user', userId);
+        gr.addQuery('skill', skill);
+        gr.query();
+        if (gr.next()) {
+            return {
+                isValidated: true,
+                skillLevelValue: gr.skill_level.value.toString()
+            };
+        }
+        return {
+            isValidated: false
+        };
+    }
+
+    function getUserSkill(levelTypeMax) {
+        try {
+            var skills = [];
+            var roleLevelSkills = [];
+            var roleskills = [];
+            var skillSysIds = [];
+            var changeSkillProficiency = {
+                id: "changeSkillProficiency",
+                name: "${Change skill proficiency}"
+            };
+            var deleteSkill = {
+                id: "deleteSkill",
+                name: "${Delete skill}"
+            };
+            var addSkill = {
+                id: "addSkill",
+                name: "${Add skill}"
+            }
+            const userSkills = new sn_skills_int.EmployeeSkillProfileUtil().getUserSkills(userId, SkillConstants.ALL);
+            userSkills.skills.forEach(function(item, index) {
+                if (!gs.nil(item.name)) {
+                    if (item.name.length &gt; SkillConstants.NUMBER_OF_CHARACTER)
+                        item.name = item.name.substring(0, SkillConstants.NUMBER_OF_CHARACTER) + '...';
+                    if (item.levelTypeId)
+                        item.showProficiency = true
+                    else
+                        item.showProficiency = false;
+                    item.skillName = item.name;
+                    item.skillSysId = item.id;
+                    if (item.proficiency) {
+                        item.skillLevel = item.proficiency.value;
+                        item.minRating = 0;
+                        if (parseInt(item.skillLevel) === parseInt(data.levelTypeMax[item.levelTypeId]))
+                            item.isHighestLevel = true;
+                        else
+                            item.isHighestLevel = false;
+                    }
+                    if (item.required == true) {
+                        var roleLevelIds = new RoleLevelSkillsAPI().getEmployeeRoleLevelsByUserId(userId, true);
+                        data.roleLevels = [];
+                        try {
+                            //fetch roles for user
+                            var roleLevelGr = new GlideRecord(SkillConstants.ROLE_LEVEL);
+                            roleLevelGr.addQuery('sys_id', 'IN', roleLevelIds);
+                            roleLevelGr.query();
+                            while (roleLevelGr.next()) {
+                                data.roleLevels.push(roleLevelGr.getValue('title'));
+                            }
+                            var roleSkills = new RoleLevelSkillsAPI().getCurrentSkillsRelevantToRoleLevel(roleLevelIds[0], userId);
+                            for (var i = 0; i &lt; roleSkills.skills.length; i++) {
+                                if (roleSkills.skills[i].required &amp;&amp; roleSkills.skills[i].id === item.skillSysId) {
+                                    item.requiredProficiency = roleSkills.skills[i].requiredProficiency?.value;
+                                    break;
+                                }
+                            }
+                            var requiredSkillPopover = {
+                                skillName: {
+                                    heading: "${Required skill for role(s)} ",
+                                    content: item.requiredProficiency ? item.requiredProficiency + ' - ' + data.roleLevels[0] : data.roleLevels[0],
+                                }
+                            }
+                            item.hoverText = requiredSkillPopover;
+                        } catch (exception) {
+                            var errorMessage = gs.getMessage('Exception occurred while fetching role level skill');
+                            gs.error(errorMessage);
+                            gs.error(exception);
+                        }
+                        data.requiredSkills.push(item);
+                    }
+                    var skillConfiguration = {
+                        config: {
+                            includeProficiency: true,
+                            actionMenu: [],
+                            changeColorOnHover: true,
+                            widgetId: data.widgetId
+                        }
+                    };
+                    var validationDetails = isGetUserHasSkillExist(userId, item.id);
+                    item.validatedSkillLevelValue = validationDetails.skillLevelValue ? validationDetails.skillLevelValue : null;
+                    //if logged in user tries to access the widget of other user action menu should not be there.
+                    if (data.userid != userId)
+                        delete skillConfiguration.config.actionMenu;
+                    if (item.levelTypeId &amp;&amp; skillConfiguration.config.actionMenu &amp;&amp; !skillConfiguration.config.actionMenu.includes(changeSkillProficiency))
+                        skillConfiguration.config.actionMenu.push(changeSkillProficiency);
+                    if (!item.isValidated &amp;&amp; !item.required &amp;&amp; skillConfiguration.config.actionMenu &amp;&amp; !validationDetails.isValidated)
+                        skillConfiguration.config.actionMenu.push(deleteSkill);
+                    item.configuration = skillConfiguration;
+                    if (!item.required)
+                        data.userSkills.push(item);
+                }
+            });
+            if (data.userSkills.length &gt; 0)
+                data.hasRecordsToShow = true;
+            data.hasMoreSkills = data.userSkills.length &gt; SkillConstants.NUMBER_OF_SKILLS;
+            var recommendedSkills = [];
+            var extractedSkillsObj = [];
+            //Skills in Recommended skills section from source related skills
+            var recommendedSkillsResponse = new sn_skills_int.RecommendedSkillsAPI().getRecommendedSkills(userId, 'RELATED', 10);
+            //Skills in Recommended skills section from source user role
+            try {
+                var roleLevelSkillsGap = new sn_skills_int.RoleLevelSkillsAPI().getEmployeeCurrentSkillGap(userId, true);
+                if (roleLevelSkillsGap &amp;&amp; roleLevelSkillsGap.skills.length &gt; 0) {
+                    for (var skillObj in roleLevelSkillsGap.skills) {
+                        //Checking if the skill is recommended due to proficiency gap that is being negleted
+                        if (roleLevelSkillsGap.skills[skillObj].gapType != "proficiency")
+                            recommendedSkills = recommendedSkills.concat(roleLevelSkillsGap.skills[skillObj]);
+                    }
+                }
+            } catch (exception) {
+                gs.error(exception);
+            }
+            var extractedSkills = new GlideRecord('sn_skills_int_extracted_skill');
+            extractedSkills.addQuery('user', userId);
+            extractedSkills.addQuery('added_to_profile', false);
+            extractedSkills.query();
+            while (extractedSkills.next()) {
+                extractedSkillsObj = extractedSkillsObj.concat(extractedSkills.getValue('skill'));
+                var userSkillArray = [{
+                    sysId: extractedSkillsObj
+                }];
+            }
+
+
+            var cmnSkills = new GlideRecord(SkillConstants.CMN_SKILL);
+            cmnSkills.addQuery('sys_id', "IN", extractedSkillsObj);
+            cmnSkills.addActiveQuery();
+            cmnSkills.query();
+            while (cmnSkills.next()) {
+                var extractedSkill = {};
+                extractedSkill.id = cmnSkills.getValue('sys_id');
+                extractedSkill.name = cmnSkills.getValue('name');
+                extractedSkill.levelTypeId = cmnSkills.getValue('level_type');
+                recommendedSkills = recommendedSkills.concat(extractedSkill);
+            }
+
+            if (recommendedSkillsResponse &amp;&amp; recommendedSkillsResponse.skills.length &gt; 0) {
+                for (var skillObj in recommendedSkillsResponse.skills)
+                    recommendedSkills = recommendedSkills.concat(recommendedSkillsResponse.skills[skillObj]);
+            }
+
+            const result = Object.values(recommendedSkills.reduce(function(skill, current) {
+                var recommendedSkillConfiguration = {
+                    config: {
+                        'changeColorOnHover': true,
+                        'actionMenu': [addSkill],
+                    }
+                }
+                if (gs.nil(skill[current.id])) {
+                    var rSkill = {};
+                    if (!current.levelTypeId)
+                        rSkill.showProficiency = false;
+                    else
+                        rSkill.showProficiency = true;
+                    rSkill.unSkilled = true;
+                    rSkill.skillName = current.name;
+                    rSkill.skillSysId = current.id;
+                    rSkill.levelTypeId = current.levelTypeId;
+                    rSkill.configuration = recommendedSkillConfiguration;
+                    skill[current.id] = rSkill;
+                }
+                return skill;
+            }, {}));
+            result.sort(function(a, b) {
+                return a.skillName.localeCompare(b.skillName);
+            })
+            data.recomendedSkills = result.slice(0, 20);
+
+        } catch (exception) {
+            var errorMsg = gs.getMessage('Exception occurred while fetching user skill');
+            gs.error(errorMsg);
+            gs.error(exception);
+        }
+    }
+})();]]&gt;&lt;/script&gt;&lt;servicenow&gt;false&lt;/servicenow&gt;&lt;sys_class_name&gt;sp_widget&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2023-03-02 12:30:42&lt;/sys_created_on&gt;&lt;sys_id&gt;a12b08b44f2211101f1cbd6b0e72e00e&lt;/sys_id&gt;&lt;sys_mod_count&gt;535&lt;/sys_mod_count&gt;&lt;sys_name&gt;User Skills&lt;/sys_name&gt;&lt;sys_package display_value="Skills Intelligence" source="sn_skills_int"&gt;a02907e177211110fe0050f79a106105&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Skills Intelligence"&gt;a02907e177211110fe0050f79a106105&lt;/sys_scope&gt;&lt;sys_update_name&gt;sp_widget_a12b08b44f2211101f1cbd6b0e72e00e&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2023-11-24 06:35:39&lt;/sys_updated_on&gt;&lt;template&gt;&lt;![CDATA[&lt;sp-panel ng-if="data.hasRecordsToShow!=undefined  &amp;&amp; data.showWidget &amp;&amp; !c.useAttachModalOnly &amp;&amp; c.displayWidget" widget-title = "data.title"&gt;
+  &lt;div ng-if="c.data.showCareerHubLink" class="career-hub-link"&gt;
+    &lt;a href="/{{c.data.employeeCenterURLPrefix}}?id=sn_ch_overview" &gt;${Go to Career Hub &gt;}&lt;/a&gt;
+  &lt;/div&gt;
+  &lt;div ng-if="data.canRead"&gt;
+    &lt;div ng-if="!data.hasRecordsToShow &amp;&amp; c.data.showSkillActionItems" style="text-align: center"&gt;
+      &lt;img src="emptyskill.png" width="56" height="38"&gt;
+      &lt;h4 class="empty-skill-message"&gt;${Add skills}&lt;/h4&gt;
+      &lt;p class="empty-skill-subtitle"&gt;{{c.subtitle_below_image}}&lt;/p&gt;
+      &lt;button class="btn btn-primary resume-button custom-focus" aria-label="Upload a resume" data-toggle="modal" data-target="#attachModal"&gt;{{c.button_name}}&lt;/button&gt;   
+    &lt;/div&gt;
+  &lt;/div&gt;
+  &lt;div ng-if="!data.canRead"&gt;
+    &lt;p class="no-access-message"&gt;{{c.no_access_message}}&lt;/p&gt;  
+  &lt;/div&gt;
+  &lt;div class="skill-lists-wrapper"&gt;
+  &lt;div ng-if="requiredSkills.length &gt; 0 &amp;&amp; c.widget.options.required_section_show !== 'false'"&gt;
+    &lt;hr&gt;
+    &lt;div ng-click="changeIcon('showRequiredSkills')" class="accordion-body skill-section-header" ng-class="{'collapsed':c.widget.options.required_section_closed !== 'false'}" data-toggle="collapse" data-target="#collapseRequiredSkills"  aria-controls="collapseRequiredSkills"&gt;
+      &lt;span class="pull-right"&gt;
+        &lt;i ng-class="showRequiredSkills ? 'fa fa-chevron-up' : 'fa fa-chevron-down'"&gt;&lt;/i&gt;
+      &lt;/span&gt;
+      &lt;h2 class="panel-title"&gt;{{c.widget.options.required_section_heading || requiredSkillsHeader}}&lt;/h2&gt;
+    &lt;/div&gt;
+    &lt;nav class="collapse" ng-class="{'in':c.widget.options.required_section_closed === 'false'}" id="collapseRequiredSkills"&gt;
+      &lt;p class="skill-section-subtitle"&gt;${Based on your current roles, focus on excelling in these skills}&lt;/p&gt;
+      &lt;div class="skill skill-pills-container"&gt;
+        &lt;div class="nav nav-pills" ng-repeat="skill in requiredSkills|limitTo:c.data.limit track by getTrackId($index, skill.skillSysId)"&gt;
+            &lt;skill-pill pill="skill.configuration" action="skillPillActionClicked(actionId, skill, 0);" skill="skill" pillclicked="closeAll()"&gt;&lt;/skill-pill&gt;
+          &lt;div  id="rating-popover-{{skill.skillSysId}}" class="rating-popover popover" ng-class="{'show':skill.showLevelSlider}" is-open="{{skill.showLevelSlider ? true: undefined}}" click-outside="hideLevelSlider(skill, 0)"&gt;
+              &lt;div class="popover-content" ng-if="skill.maxRating"&gt;
+                &lt;div class="level-slider-container"&gt;
+                  &lt;div class="level-slider"&gt;
+                    &lt;div class="level-value content" id="selectSkillProficiencySliderValue_{{$index}}" style="text-align : right;margin-bottom : 8px"&gt;{{skill.levels[skill.givenRating].name}}
+                      &lt;span ng-mouseenter="popoverIsOpen = true" ng-mouseleave="popoverIsOpen = false"&gt;
+                        &lt;a tabindex="0" ng-show="skill.levels[skill.givenRating].description" uib-popover-template="'skillproficiency-popover-template.html'" popover-trigger="outsideClick focus" popover-is-open="popoverIsOpen" popover-placement="auto top" aria-haspopup="true" aria-label="show skill proficiency description" style="text-decoration: none;" role="button"&gt;
+                          &lt;i class="fa fa-info-circle fa-xs fa-fw" id="info_{{skill.sysId}}"&gt;&lt;/i&gt;
+                        &lt;/a&gt;
+                      &lt;/span&gt;
+                    &lt;/div&gt;
+                    &lt;input aria-label="sliderInput_requiredskills_{{$index}}" type="range" min="0" max="{{skill.maxRating}}" ng-model="skill.givenRating" ng-change="ratingChanged(skill,0)"
+                           ng-style="{backgroundPosition: skill.backgroundPosition}" class="level-slider-input" id="sliderInput_requiredskills_{{$index}}"&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+                &lt;div&gt;
+                  &lt;p&gt;${Update skill proficiency level}&lt;/p&gt;
+                  &lt;div class="slider-buttons"&gt;
+                    &lt;button class="btn btn-default" ng-click="closeSlider(skill)"&gt; ${Close}&lt;/button&gt;
+                  	&lt;button ng-disabled="c.updateButtonDisabled" class="btn btn-primary" ng-click="selectingTheNewRating(skill.levels[skill.givenRating].value,skill)"&gt; ${Update}&lt;/button&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/nav&gt;
+  &lt;/div&gt;
+  &lt;div ng-if="c.data.userSkills.length &gt; 0 &amp;&amp; c.widget.options.additional_section_show !== 'false'"&gt;
+	&lt;hr&gt;
+    &lt;div ng-click="changeIcon('showAdditionalSkills')" class="accordion-body" ng-class="{'collapsed':c.widget.options.additional_section_closed !== 'false'}" data-toggle="collapse" data-target="#collapseAdditionalSkills"  aria-controls="collapseAdditionalSkills"&gt;
+      &lt;span class="pull-right"&gt;
+        &lt;i ng-class="showAdditionalSkills ? 'fa fa-chevron-up' : 'fa fa-chevron-down'"&gt;&lt;/i&gt;
+      &lt;/span&gt;
+        &lt;h2 class="panel-title"&gt;{{c.widget.options.additional_section_heading || additionalSkillsHeader}}&lt;/h2&gt;
+    &lt;/div&gt;
+    &lt;nav class="collapse" ng-class="{'in':c.widget.options.additional_section_closed === 'false'}" id="collapseAdditionalSkills"&gt;
+      &lt;p class="skill-section-subtitle"&gt;${All other skills you have added to your profile}&lt;/p&gt;
+      &lt;div class="skill skill-pills-container"&gt;
+		&lt;div class="dropdown nav nav-pills" ng-repeat="skill in c.data.userSkills | limitTo:c.data.limit track by getTrackId($index, skill.skillSysId)"&gt;
+        &lt;skill-pill pill="skill.configuration" action="skillPillActionClicked(actionId, skill, 0);" skill="skill" pillclicked="closeAll()"&gt;&lt;/skill-pill&gt;
+        &lt;div id="rating-popover-{{skill.skillSysId}}" class="rating-popover popover" ng-class="{'show':skill.showLevelSlider}" is-open="{{skill.showLevelSlider ? true: undefined}}" click-outside="hideLevelSlider(skill, 0)"&gt;
+          &lt;div class="popover-content" ng-if="skill.maxRating"&gt;
+            &lt;div class="level-slider-container"&gt;
+              &lt;div class="level-slider"&gt;
+                &lt;div class="level-value content" id="selectSkillProficiencySliderValue_{{$index}}" style="margin-bottom:8px;text-align:right"&gt;{{skill.levels[skill.givenRating].name}}
+              	  &lt;span ng-mouseenter="popoverIsOpen = true" ng-mouseleave="popoverIsOpen = false"&gt;
+                     &lt;a tabindex="0" ng-show="skill.levels[skill.givenRating].description" uib-popover-template="'skillproficiency-popover-template.html'" popover-trigger="outsideClick focus" popover-is-open="popoverIsOpen" popover-placement="auto top" aria-
+                        popup="true" aria-label="show skill proficiency description" style="text-decoration: none;" role="button"&gt;
+                       &lt;i class="fa fa-info-circle fa-xs fa-fw" id="info_{{skill.sysId}}"&gt;&lt;/i&gt;
+                     &lt;/a&gt;
+                  &lt;/span&gt;
+                &lt;/div&gt;
+                &lt;input tabindex="0" aria-label="sliderInput_userskills_{{$index}}" type="range" min="0" max="{{skill.maxRating}}" ng-model="skill.givenRating" ng-change="ratingChanged(skill, 0)"
+                       ng-style="{backgroundPosition: skill.backgroundPosition}" class="level-slider-input" id="sliderInput_userskills_{{$index}}"&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+            &lt;div&gt;
+              &lt;p&gt;${Update skill proficiency level}&lt;/p&gt;
+              &lt;div class="slider-buttons"&gt;
+                &lt;button class="btn btn-default" ng-click="closeSlider(skill)"&gt; ${Close}&lt;/button&gt;
+              	&lt;button ng-disabled="c.updateButtonDisabled" class="btn btn-primary" ng-click="selectingTheNewRating(skill.levels[skill.givenRating].value,skill)"&gt; ${Update}&lt;/button&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;    
+	    &lt;div class="user-Skills-footer" ng-if="c.data.hasMoreSkills"&gt;
+         &lt;a href="javascript:void(0)" id="showMore" ng-if="c.data.showMore" ng-click="getUpdatedContent(true)"&gt;${Show more}&lt;/a&gt;
+         &lt;a href="javascript:void(0)" id="showLess" ng-if="!c.data.showMore" ng-click="getUpdatedContent(false)"&gt;${Show less}&lt;/a&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+      &lt;div class="add-skill" ng-if="c.data.showSkillActionItems"&gt;
+      &lt;span ng-if="data.hasRecordsToShow"&gt;
+        &lt;a id="skillsbtn" aria-label="Add skill" href="javascript:void(0)" ng-click="addSkills()" tabindex=0 aria-controls="input" aria-expanded="false" ng-blur="closeskillsearch($event)"&gt;
+          &lt;i class="fa fa-plus-circle" style="font-family: $font-family-base" /&gt;
+          ${Add skill}
+        &lt;/a&gt;
+      &lt;/span&gt;
+      &lt;div ng-if="c.data.addskills"&gt;
+        &lt;sp-widget widget="c.data.skillstypeahead"/&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;/nav&gt;
+  &lt;/div&gt;
+  &lt;div class="modal fade" id="deleteSkillModal" tabindex="-1" aria-labelledby="deleteSkillModalLabel"&gt;
+    &lt;div class="modal-dialog modal-md"&gt;
+      &lt;div class="modal-content" style="margin-top:20%"&gt;
+        &lt;div class="modal-header"&gt;
+          &lt;h5 class="modal-title d-inline-block" style="display: inline-block" id="deleteSkillModalLabel" aria-label="Delete skill confirmation" tab-index="-1"&gt;${Delete skill confirmation}&lt;/h5&gt;
+          &lt;button id="closeButtonId" style="display: inline-block" type="button" class="close" data-dismiss="modal" aria-label="Close"&gt;
+            &lt;span aria-hidden="true"&gt;&amp;times;&lt;/span&gt;
+          &lt;/button&gt;
+        &lt;/div&gt;
+        &lt;div class="modal-body" tab-index="-1" style="padding-top: 35px; padding-bottom: 35px" aria-label="Are you sure you want to delete this skill from your profile"&gt;
+          ${Are you sure you want to delete this skill from your profile?}
+        &lt;/div&gt;
+        &lt;div class="modal-footer"&gt;
+          &lt;button type="button" style="margin-bottom:5px" class="btn btn-default" data-bs-dismiss="modal" cancel="true"&gt;${No, return to page}&lt;/button&gt;
+          &lt;button type="button" style="margin-bottom:5px" class="btn btn-danger" primary="true" ng-keydown="onBlur($event, 'closeButtonId')"&gt;${Yes, delete skill}&lt;/button&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+  
+  &lt;div ng-if="data.recomendedSkills.length &gt; 0 &amp;&amp; c.widget.options.recommended_section_hide_show !== 'false' &amp;&amp; c.data.showSkillActionItems"&gt;
+  	&lt;hr&gt;
+    	&lt;div  ng-click="changeIcon('showRecommendedSkills')" class="accordion-body" ng-class="{'collapsed':c.widget.options.recommended_section_closed !== 'false'}" data-toggle="collapse" data-target="#collapseRecommendedSkills"  aria-controls="collapseRecommendedSkills"&gt;
+    		&lt;span class="pull-right"&gt;
+    			&lt;i ng-class="showRecommendedSkills ? 'fa fa-chevron-up' : 'fa fa-chevron-down'"&gt;&lt;/i&gt;
+    		&lt;/span&gt;
+        &lt;h2 class="panel-title"&gt;{{c.widget.options.recommended_section_heading || recommendedSkillsHeader}}&lt;/h2&gt;
+      &lt;/div&gt;
+    	&lt;nav class="collapse" ng-class="{'in':c.widget.options.recommended_section_closed ==='false'}" id="collapseRecommendedSkills"&gt;
+    		&lt;p class="skill-section-subtitle"&gt;${Based on your current skills and activity, you might want to add...}&lt;/p&gt;
+        	&lt;div class="skill skill-pills-container"&gt;
+		 				&lt;div class="nav nav-pills dropdown" ng-repeat="skill in data.recomendedSkills|limitTo:c.data.limit track by getTrackId($index, skill.skillSysId)"&gt;
+             	&lt;skill-pill pill="skill.configuration"  action="skillPillActionClicked(actionId, skill);" skill="skill" pillclicked="closeAll()"&gt;&lt;/skill-pill&gt;
+              &lt;div id="rating-popover-{{skill.skillSysId}}" class="rating-popover popover" ng-class="{'show':skill.showLevelSlider}" is-open="{{skill.showLevelSlider ? true: undefined}}" click-outside="hideLevelSlider(skill, 1)"&gt;
+          			&lt;div class="popover-content" ng-if="skill.maxRating"&gt;
+            			&lt;div class="level-slider-container"&gt;
+              			&lt;div class="level-slider"&gt;
+                			&lt;div class="level-value content" id="selectSkillProficiencySliderValue_{{$index}}" style="margin-bottom:8px;text-align:right"&gt;{{skill.levels[skill.givenRating].name}}
+              	  			&lt;span ng-mouseenter="popoverIsOpen = true" ng-mouseleave="popoverIsOpen = false"&gt;
+                     			&lt;a tabindex="0" ng-show="skill.levels[skill.givenRating].description" uib-popover-template="'skillproficiency-popover-template.html'" popover-trigger="outsideClick focus" popover-is-open="popoverIsOpen" popover-placement="auto top" aria-haspopup="true" aria-label="show skill proficiency description" style="text-decoration: none;" role="button"&gt;
+                       		&lt;i class="fa fa-info-circle fa-xs fa-fw" id="info_{{skill.sysId}}"&gt;&lt;/i&gt;
+                     			&lt;/a&gt;
+                  			&lt;/span&gt;
+                			&lt;/div&gt;
+                			&lt;input tabindex="0" aria-label="sliderInput_userskills_{{$index}}" type="range" min="1" max="{{skill.maxRating}}" ng-model="skill.givenRating" ng-change="ratingChanged(skill, 1)"
+                       ng-style="{backgroundPosition: skill.backgroundPosition}" class="level-slider-input" id="sliderInput_userskills_{{$index}}"&gt;
+              			&lt;/div&gt;
+            			&lt;/div&gt;
+            			&lt;div&gt;
+              			&lt;p&gt;${Update skill proficiency level}&lt;/p&gt;
+                    	&lt;div class="slider-buttons"&gt;
+                        &lt;button class="btn btn-default" ng-click="closeSlider(skill)"&gt; ${Close}&lt;/button&gt;
+              					&lt;button class="btn btn-primary" ng-click="selectingTheNewRating(skill.levels[skill.givenRating].value,skill)"&gt; ${Update}&lt;/button&gt;
+                    	&lt;/div&gt;
+            			&lt;/div&gt;
+          			&lt;/div&gt;
+        			&lt;/div&gt;
+           	&lt;/div&gt;
+      	 	&lt;/div&gt;
+    	&lt;/nav&gt;
+	&lt;/div&gt;
+	&lt;/div&gt;
+&lt;/sp-panel&gt;
+
+&lt;div id="attachModal" class="modal modal-fullpage fade in"&gt;
+  &lt;div class="modal-content" ng-class="{'full-height': currentStep === 'success'}"&gt;
+    &lt;button type="button" class="close" id="closeicon" data-dismiss="modal" ng-click="showLeaveConfirmationModal(c.newSkillsFound)" aria-label="Close"&gt;
+      &lt;i class="fa fa-times"&gt;&lt;/i&gt;
+    &lt;/button&gt;
+    &lt;div class="modal-body container" ng-class="{'full-height': currentStep === 'success'}" ondrop="onFileDrop(event)" ondragover="allowDrop(event)"&gt;
+      &lt;div ng-show="(!c.showSkills &amp;&amp; !c.loading)" style="display: flex; flex-direction: column; align-items: center; padding-left: 10%; padding-right: 10%; padding-top: 5%; padding-bottom: 5%;"&gt;
+        &lt;div class="heading" style="display: flex; flex-direction: column; align-items: center;"&gt;
+          &lt;h1&gt;${Upload your LinkedIn profile or Resume}&lt;/h1&gt;
+        &lt;/div&gt; 
+      &lt;/div&gt;
+      &lt;div ng-class="{'file-loading': c.loading}" ng-show="(!c.fileNotFound || !c.isZip) &amp;&amp; (!c.showSkills || c.loading)" class = "upload-info"&gt;
+        &lt;img src="sn_skills_int.upload-file.png" width="47" height="57" ng-show="!c.showSkills"/&gt;
+        &lt;div ng-show="(!c.showSkills) || c.loading" style="display: flex; flex-direction: column; align-items: center;"&gt;
+          &lt;p ng-if="c.showDropMessage" style="font: 'Lato'; font-size: 112%; padding-top: 2%;"&gt;${Upload your file by browsing or dragging and dropping. We'll find career details for you.}&lt;/p&gt;
+          &lt;h5 class="supported-files"&gt;{{c.modal_body_text_below_image}}&lt;/h5&gt;
+        &lt;/div&gt;
+        &lt;div ng-show="!c.showSkills &amp;&amp; !c.loading" style="padding-top: 3%"&gt;
+          &lt;input class="btn btn-primary" 
+                 id="loadFileXml"
+                 onclick="document.getElementById('attachFile').click();" 
+                 title=""
+                 type="button" 
+                 value="${Browse files}"
+                 aria-label="Browse files"
+                 data-original-title="Browse files"&gt;
+          &lt;input aria-hidden="true" 
+                 id="attachFile"
+                 name="attachFile"  
+                 size="41" 
+                 style="width: 0.1px;height: 0.1px;opacity: 0;overflow: hidden;position: absolute;z-index: -1;" 
+                 tabindex="-1" 
+                 type="file"
+                 accept=".docx,application/pdf,text/plain,.zip,application/zip"&gt;
+        &lt;/div&gt;
+        &lt;div ng-if="c.dragFile"&gt;
+          &lt;input type="file"
+                 aria-hidden="true"
+                 id="dropFile"
+                 name="dropFile" 
+                 [multiple]="false"
+                 style="display:none"
+                 accept=".docx,.pdf,.txt,.zip,application/zip"
+                 /&gt;
+        &lt;/div&gt; 
+        &lt;div id="model" ng-if="!c.allowedSizeType"&gt;&lt;/div&gt;
+        &lt;div ng-show="c.loading"&gt;
+          &lt;h5 style="font: 'Lato'; font-size: 87%; font-weight: 100; color: #474D5A;"&gt;${Uploading your file...}&lt;/h5&gt;
+        &lt;/div&gt;
+        &lt;div class="now-progress-bar-container" ng-show="c.loading"&gt;
+          &lt;img src="sn_skills_int.rectangleloader.png" style="top: 0; left: 0;"&gt;
+          &lt;img src="sn_skills_int.rectangleLoaderBackground.png" style="position: absolute; top: 1px; left: 0;"&gt;
+        &lt;/div&gt;
+
+      &lt;/div&gt;
+      &lt;div ng-show="!c.showSkills &amp;&amp; !c.loading" class="upload-steps"&gt;
+        &lt;p class="steps-text"&gt;${Follow these steps to upload your LinkedIn profile}&lt;/p&gt;
+        &lt;div class="steps"&gt;
+          &lt;div class="step"&gt;
+            &lt;h5&gt;${Step 1}&lt;/h5&gt;
+            &lt;p class="upload-steps-text"&gt;${Request a copy of your data from} &lt;a target="_blank" href="https://www.linkedin.com/mypreferences/d/download-my-data"&gt;${LinkedIn}&lt;/a&gt;&lt;/p&gt; 
+          &lt;/div&gt;
+          &lt;div class="step"&gt;
+            &lt;h5&gt;${Step 2}&lt;/h5&gt;
+            &lt;p class="upload-steps-text"&gt;${Wait for LinkedIn to notify you via email}&lt;/p&gt;
+          &lt;/div&gt;
+          &lt;div class="step"&gt;
+            &lt;h5&gt;${Step 3}&lt;/h5&gt;
+            &lt;p class="upload-steps-text"&gt;${Browse for the file, or drag and drop it}&lt;/p&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div ng-show="c.showSkillselection &amp;&amp; c.newSkillsFound" class="skills-container"&gt; 
+        &lt;div class="heading" style="display: flex; flex-direction: column; align-items: center;"&gt;
+          &lt;h1&gt;{{c.skill_header_msg}}&lt;/h1&gt;
+          &lt;p class="heading text-muted" style="padding-bottom: 5%"&gt;
+            ${Deselect any skills you don’t wish to add now. Additional skills can be added later.}
+          &lt;/p&gt;
+        &lt;/div&gt;
+        &lt;div ng-show="c.showUnavailableSkillsAlert" class="alert alert-warning unavailable-skills-alert" role="alert"&gt;
+          &lt;p class ="unavailable-skills-alert-message"&gt;
+            &lt;b&gt;{{c.unavailableSkillsMessage}}&lt;/b&gt;${ could not be added because they’re not available in our current skill database. Try adding these again in the future as we routinely update the database with new skills.}
+          &lt;/p&gt;
+          &lt;i class="fa fa-times" ng-click="closeUnavailableSkillsAlert()" role="button"&gt;&lt;/i&gt;
+        &lt;/div&gt;
+        &lt;div class="skillContainer"&gt;
+          &lt;div class="row table-head"&gt;
+            &lt;div class= "col-md-1 skill-check-box"&gt;
+              &lt;input aria-label="select all for filtered skills" class="skillCheckbox" id="skillCheckboxAll" type="checkbox" class="input-checkbox" ng-model="c.isAllSelected" ng-keypress="toggleAllOnEnter($event)" ng-click="toggleAll();"/&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-6"&gt;
+              &lt;strong&gt;${Skill name}&lt;/strong&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-5"&gt;
+              &lt;strong&gt;${Proficiency level}&lt;/strong&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div ng-repeat="skill in c.data.filteredSkills track by $index" class="row table-row"&gt;
+            &lt;div class="col-md-1 skill-check-box"&gt;
+              &lt;input class="skillCheckbox" type="checkbox" class="input-checkbox" id={{skill.name}}
+                     aria-label={{skill.name}}
+                     value={{skill.sysId}} role="checkbox" ng-keypress="selectSkill($event, skill, 'filteredSkills')" ng-model="skill.checked" ng-change="optionToggled('filteredSkills');"/&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-6"&gt;
+              &lt;label class="input-label"&gt; 
+                &lt;span class="multi-line-text"&gt; {{skill.name}} &lt;/span&gt;
+              &lt;/label&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-5" &gt;
+              &lt;div class="ratingcontainer"&gt;
+                &lt;div class="level-slider-container" ng-if="skill.maxRating"&gt;
+                  &lt;div class="level-slider"&gt;
+                    &lt;input aria-label="slider For resume skills {{skill.name}}" aria-valuetext="{{skill.givenRating}} {{skill.levels[skill.givenRating].name}}" type="range" min="1" max="{{skill.maxRating}}" ng-model="skill.givenRating" ng-change="ratingChanged(skill, 1)"
+                           ng-style="{backgroundPosition: skill.backgroundPosition}" class="level-slider-input" id="sliderInput_filteredskills_{{$index}}"&gt;
+                  &lt;/div&gt;
+                  &lt;div class="level-value content" id="selectSkillProficiencySliderValue_{{$index}}"&gt;
+                    {{skill.levels[skill.givenRating].name}}
+                    &lt;span ng-mouseenter="popoverIsOpen = true" ng-mouseleave="popoverIsOpen = false"&gt;
+                      &lt;a tabindex="0" ng-show="skill.levels[skill.givenRating].description" uib-popover-template="'skillproficiency-popover-template.html'" popover-trigger="outsideClick focus" popover-is-open="popoverIsOpen" popover-placement="auto top" aria-haspopup="true" aria-label="show skill proficiency description" style="text-decoration: none;" role="button"&gt;
+                        &lt;i class="fa fa-info-circle fa-xs fa-fw" id="info_{{skill.sysId}}"&gt;&lt;/i&gt;
+                      &lt;/a&gt;
+                    &lt;/span&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+
+      &lt;div class="noskill" ng-show="(c.fileNotFound &amp;&amp; c.isZip) || (c.showSkillselection &amp;&amp; !c.newSkillsFound)"&gt;
+        &lt;img src="sn_skills_int.upload-file.png" width="47" height="57" /&gt;
+        &lt;p class="noskillmsg"&gt;${Seems like there are no skills available} &lt;/p&gt;
+        &lt;p class="fileuploaded"&gt;{{c.fileType}} ${file uploaded}&lt;/p&gt;
+        &lt;a class="uploadotherfile" onclick="document.getElementById('attachFile').click();" &gt;${Upload a different file}&lt;/a&gt; 
+      &lt;/div&gt;
+
+    &lt;/div&gt;
+
+    &lt;div class="modal-footer" ng-if="currentStep !== 'success'"&gt;
+      &lt;si-footer ng-if="currentStep!=='success'" completion-value="c.completionValue" disable-progress-bar=false&gt;
+        &lt;left-buttons class="left-buttons"&gt;
+          &lt;button
+                  class="btn btn-default"
+                  data-dismiss="modal"
+                  ng-click="showLeaveConfirmationModal(c.newSkillsFound)"&gt;
+            ${Cancel}
+          &lt;/button&gt;
+        &lt;/left-buttons&gt;
+        &lt;right-buttons class="right-buttons"&gt;  
+          &lt;button
+                  ng-show="c.showSkills &amp;&amp; c.newSkillsFound"
+                  ng-disabled="checkDisabled(c.data.filteredSkills)"
+                  class="btn btn-primary full"
+                  data-dismiss="modal"
+                  ng-click="addMySkills('filteredSkills')"
+                  ng-keydown="onBlur($event, 'closeicon')"&gt;
+            ${Add to your profile}
+          &lt;/button&gt;
+        &lt;/right-buttons&gt;
+      &lt;/si-footer&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div id="roleLevelSkillsModal" ng-if="!c.useAttachModalOnly &amp;&amp; c.data.showSkillActionItems" class="modal modal-fullpage fade in"&gt;
+  &lt;div class="modal-content" ng-class="{'full-height': currentStep === 'success'}" style="background: #F6F6F8;"&gt;
+    &lt;button type="button" class="close" id="closeModal" autofocus="true" tabindex="0" data-dismiss="modal" ng-keypress="closeOnEnter($event, 'closeModal')" ng-click="closeModal()" aria-label="Close"&gt;
+      &lt;i class="fa fa-times"&gt;&lt;/i&gt;
+    &lt;/button&gt;
+    &lt;div class="modal-body container"&gt;
+      &lt;div ng-show="c.showSkillselection &amp;&amp; c.newSkillsFound" style="background: #F6F6F8; padding-top: 8%; top: 20%; width: 100%;"&gt;
+        &lt;div class="heading" style="padding-bottom: 5%"&gt;
+          &lt;h5 style="text-align: center; font-weight: normal;" aria-label="Your role"&gt;
+            ${Your role}
+          &lt;/h5&gt;
+          &lt;h2 style="text-align: center;" aria-label="{{c.roleName}}"&gt;
+            {{c.roleName}}
+          &lt;/h2&gt;
+          &lt;p class="heading text-muted" style="text-align: center;" aria-label="Based on your role, we recommend the following skills. You can select a proficiency level, remove skills you don’t want on your profile, or add additional skills later."&gt;
+            ${Based on your role, we recommend the following skills. You can select a proficiency level, remove skills you don’t want on your profile, or add additional skills later.}
+          &lt;/p&gt;
+        &lt;/div&gt;
+        &lt;div class="skillTableContainer"&gt;
+          &lt;div class="row table-head"&gt;
+            &lt;div class= "col-md-1" style="width: 16px; height: 16px;"&gt;
+              &lt;input aria-label="select all for role level skills" class="skillCheckbox" id="skillCheckboxAllForRoleLevelSkills" type="checkbox" class="input-checkbox" ng-model="c.isAllSelected" ng-keypress="toggleAllOnEnter($event)" ng-click="toggleAll();"/&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-5"&gt;
+              &lt;strong&gt;${Skill name}&lt;/strong&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-6"&gt;
+              &lt;strong&gt;${Proficiency level}&lt;/strong&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+          &lt;div ng-repeat="skill in c.data.roleLevelSkills track by $index" class="row table-row"&gt;
+            &lt;div class= "col-md-1" style="width: 16px; height: 16px;"&gt;
+              &lt;input class="skillCheckbox" type="checkbox" class="input-checkbox" id={{skill.name}}
+                     aria-label="{{skill.required ? skill.name + 'is required skill and cannot be de-selected' : skill.name + 'can be selected or de-selected by clicking on enter or space'}}" ng-disabled="skill.required"
+                     value={{skill.sysId}} role="checkbox" ng-keypress="selectSkill($event, skill, 'roleLevelSkills')" ng-model="skill.checked" ng-change="optionToggled('roleLevelSkills');"/&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-5"&gt;
+              &lt;label class="input-label"&gt; 
+                &lt;span class="multi-line-text"&gt; {{skill.name}} &lt;/span&gt;
+              &lt;/label&gt;
+            &lt;/div&gt;
+            &lt;div class="col-md-6"&gt;
+              &lt;div class="ratingcontainer"&gt;
+                &lt;div ng-if="skill.maxRating"&gt;
+                  &lt;div class="level-slider-container"&gt;
+                    &lt;div class="level-slider"&gt;
+                      &lt;input aria-label="slider_rolelevelskills_{{$index}}" type="range" min="1" max="{{skill.maxRating}}" ng-model="skill.givenRating" ng-change="ratingChanged(skill, 1)"
+                             ng-style="{backgroundPosition: skill.backgroundPosition}" class="level-slider-input" id="sliderInput_rolelevelskills_{{$index}}"&gt;
+                    &lt;/div&gt;
+                    &lt;div class="level-value content" id="selectSkillProficiencySliderValue_{{$index}}"&gt;
+                      {{skill.levels[skill.givenRating].name}}
+                      &lt;span ng-mouseenter="popoverIsOpen = true" ng-mouseleave="popoverIsOpen = false"&gt;
+                        &lt;a tabindex="0" ng-show="skill.levels[skill.givenRating].description" uib-popover-template="'skillproficiency-popover-template.html'" popover-trigger="outsideClick focus" popover-is-open="popoverIsOpen" popover-placement="auto top" aria-haspopup="true" aria-label="show skill proficiency description" style="text-decoration: none;" role="button"&gt;
+                          &lt;i class="fa fa-info-circle fa-xs fa-fw" id="info_{{skill.sysId}}"&gt;&lt;/i&gt;
+                        &lt;/a&gt;
+                      &lt;/span&gt;
+                    &lt;/div&gt;
+                  &lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+        &lt;div class="heading" ng-show="c.showSkillselection &amp;&amp; !c.newSkillsFound" style="text-align: center;"&gt;
+          ${No new skills found to add to profile.}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+    &lt;div class="modal-footer" ng-if="currentStep !== 'success'"&gt;
+      &lt;si-footer ng-if="currentStep!=='success'" completion-value="c.completionValue" disable-progress-bar=false&gt;
+        &lt;left-buttons class="left-buttons"&gt;
+          &lt;button
+                  class="btn btn-default"
+                  data-dismiss="modal"
+                  ng-click="closeModal()"&gt;
+            ${Cancel}
+          &lt;/button&gt;
+        &lt;/left-buttons&gt;
+        &lt;right-buttons class="right-buttons"&gt;
+          &lt;button
+                  ng-show="c.showSkills &amp;&amp; c.newSkillsFound"
+                  ng-disabled="checkDisabled(c.data.roleLevelSkills)"
+                  class="btn btn-primary full"
+                  data-dismiss="modal"
+                  ng-click="addMySkills('roleLevelSkills')"
+                  ng-keydown="onBlur($event, 'closeModal')"&gt;
+            ${Update}
+          &lt;/button&gt;
+        &lt;/right-buttons&gt;
+      &lt;/si-footer&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;
+
+&lt;div class="modal fade" id="leavePageModal" tabindex="-1" aria-labelledby="leavePageModalLabel"&gt;
+  &lt;div class="modal-dialog modal-md"&gt;
+    &lt;div class="modal-content" style="margin-top: auto"&gt;
+      &lt;div class="modal-header"&gt;
+        &lt;h5 class="modal-title d-inline-block" style="display: inline-block" id="leavePageModalLabel"&gt;${Leave this page}&lt;/h5&gt;
+        &lt;button id="leavePageModalCloseIcon" style="display: inline-block" type="button" class="close" data-dismiss="modal" aria-label="Close"&gt;
+          &lt;span aria-hidden="true"&gt;&amp;times;&lt;/span&gt;
+        &lt;/button&gt;
+      &lt;/div&gt;
+      &lt;div class="modal-body" tab-index="-1" style="padding-top: 35px; padding-bottom: 35px;" aria-label="Are you sure you want to exit? Any selected skills will not be added."&gt;
+        ${If you leave this page now, these items won't be added to your career profile.}
+      &lt;/div&gt;
+      &lt;div class="modal-footer"&gt;
+        &lt;button type="button" class="btn btn-default" data-bs-dismiss="modal" cancel="true"&gt;${No, return}&lt;/button&gt;
+        &lt;button type="button" class="btn btn-danger" primary="true" ng-keydown="onBlur($event, 'leavePageModalCloseIcon')"&gt;${Yes, leave page}&lt;/button&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+  &lt;/div&gt;
+&lt;/div&gt;]]&gt;&lt;/template&gt;&lt;/sp_widget&gt;</payload>
+        <sys_class_name>sp_rel_widget_clone</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-11-29 05:47:23</sys_created_on>
+        <sys_id>fb9fae614376b510cc7e00002fb8f276</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>7b9fae614376b510cc7e00002fb8f216</sys_name>
+        <sys_package display_value="CreateNotes" source="x_snc_createnotes">df5fd9a5090232007f44e1046c8ff69f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="CreateNotes">df5fd9a5090232007f44e1046c8ff69f</sys_scope>
+        <sys_update_name>sp_rel_widget_clone_fb9fae614376b510cc7e00002fb8f276</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-11-29 05:47:23</sys_updated_on>
+    </sp_rel_widget_clone>
+</record_update>

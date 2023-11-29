@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_rel_widget_clone">
+    <sp_rel_widget_clone action="INSERT_OR_UPDATE">
+        <child display_value="Copy of Copy of Add Skills1">c35fa6ad4336b510cc7e00002fb8f27e</child>
+        <cloned>2023-11-29 05:46:04</cloned>
+        <last_validated>2023-11-29 05:46:04</last_validated>
+        <parent display_value="Add Skills">5f6dde3db7f5111084c46bbf1e11a977</parent>
+        <payload>&lt;?xml version="1.0" encoding="UTF-8"?&gt;&lt;sp_widget&gt;&lt;category&gt;custom&lt;/category&gt;&lt;client_script&gt;&lt;![CDATA[function controller($http, $filter, $location, spAriaUtil, $window, $scope, $rootScope) {
+    var c = this;
+    var skillLevelTypes = {};
+
+    $rootScope.$on("refresh_typeahead", function() {
+        $scope.searchStr = '';
+    });
+
+    $scope.displayRating = true;
+
+    /*function to call Skill Recommendation API*/
+    $scope.searchSkill = function(userInputString) {
+        var searchKeyWord = {
+            string: userInputString
+        };
+        return c.server.get(searchKeyWord).then(function(resp) {
+            var levelTypeDtlIndex = resp.data.searchResult.findIndex(function(a) {
+                a.levelTypeDtl != undefined;
+            });
+
+            skillLevelTypes = resp.data.searchResult.splice(levelTypeDtlIndex, 1);
+            var searchResult = resp.data.searchResult;
+            for (var i = 0; i &lt; searchResult.length; i++) {
+                if (skillLevelTypes[0].levelTypeDtl &amp;&amp; skillLevelTypes[0].levelTypeDtl[searchResult[i].levelTypeSysId]) {
+                    searchResult[i].levelCount = skillLevelTypes[0].levelTypeDtl[searchResult[i].levelTypeSysId].levelCount;
+                    searchResult[i].titles = $scope.noTitles(searchResult[i].levelTypeSysId);
+                } else
+                    searchResult[i].levelCount = 0;
+            }
+            $scope.displayRating = false;
+
+            setTimeout(function() {
+                $scope.displayRating = true;
+                $scope.$apply();
+            });
+            return searchResult;
+        })
+    }
+
+    $scope.updateSkill = function(skill) {
+        c.data.skill = skill;
+        c.server.update();
+    }
+
+    /* function to format match from typeahead and show nothing*/
+    $scope.displaySkillName = function(model) {
+        if (model)
+            return ''
+    }
+
+    /* Function to return an empty array for star titles */
+    $scope.noTitles = function(levelsysid) {
+        if (!skillLevelTypes[0].levelTypeDtl[levelsysid])
+            return [''];
+        var len = skillLevelTypes[0].levelTypeDtl[levelsysid].levelCount;
+        return Array.apply(null, Array(len)).map(function() {
+            return ''
+        });
+    }
+
+}]]&gt;&lt;/client_script&gt;&lt;controller_as&gt;c&lt;/controller_as&gt;&lt;css&gt;.dropdown-menu &amp;gt; .active &amp;gt; a, .dropdown-menu &amp;gt; .active &amp;gt; a:hover, .dropdown-menu &amp;gt; .active &amp;gt; a:focus {
+  background-color: #E4E6EA!important;
+}
+
+.typeahead {
+  padding: 8px 0px 0px 0px;
+}
+
+.typeahead-popup {
+    position: absolute;
+    top: 100%;
+  	left: 0;
+    z-index: 1000;
+    display: block;
+    width: 66.5% !important;  
+  }
+
+.typeahead .typeahead-popup &amp;gt; .dropdown-menu {
+    position: static;
+    display: block;
+    width: inherit;
+    min-width: 82% !important;
+ }&lt;/css&gt;&lt;data_table&gt;sp_instance_ais&lt;/data_table&gt;&lt;demo_data/&gt;&lt;description/&gt;&lt;docs/&gt;&lt;field_list&gt;search_application,search_results_configuration,disable_all_suggestions,placeholder,ai_search_source_filter&lt;/field_list&gt;&lt;has_preview&gt;true&lt;/has_preview&gt;&lt;id&gt;add-skills&lt;/id&gt;&lt;internal&gt;false&lt;/internal&gt;&lt;link/&gt;&lt;name&gt;Add Skills&lt;/name&gt;&lt;option_schema&gt;[{"hint":"Whether skill will be added to users' profile","name":"add_skill_to_profile","section":"Presentation","default_value":"true","label":"Add Skill To Profile","type":"boolean"},{"name":"color","section":"Presentation","label":"Color","type":"string"},{"name":"glyph","section":"Presentation","label":"glyph","type":"string"},{"name":"size","section":"Presentation","label":"Size","type":"string"},{"hint":"Number of typeahead search results returned (default 15)","name":"limit","section":"Behavior","label":"Limit","type":"integer"},{"displayValue":"Search Source","hint":"If provided, limit the scope of the typeahead search to the given search sources","name":"contextual_search_sources","display_value_list":[],"section":"Behavior","label":"Contextual Search Sources","type":"glide_list","value":"sp_search_source","ed":{"reference":"sp_search_source"}},{"name":"title","section":"other","default_value":"skill search dropdown","label":"title","type":"string"}]&lt;/option_schema&gt;&lt;public&gt;false&lt;/public&gt;&lt;roles&gt;sn_skills_int.admin,sn_skills_int.emp,sn_skills_int.manager&lt;/roles&gt;&lt;script&gt;&lt;![CDATA[(function() {
+    data.searchSuggestionsMsg = "menu";
+    if (input &amp;&amp; input.skill) {
+        var userId = $sp.getParameter("sys_id") || gs.getUserID();
+        var skillId = input.skill.sysId;
+        markExtractedSkillAsTrue(userId, skillId);
+        var cmnSkillLevelGR = new GlideRecord(SkillConstants.CMN_SKILL_LEVEL);
+        if (input.skill.levelTypeSysId &amp;&amp; input.skill.userSkill &amp;&amp; input.skill.userSkill.skillLevelValue &amp;&amp; cmnSkillLevelGR.canRead()) {
+            cmnSkillLevelGR.addQuery("skill_level_type", input.skill.levelTypeSysId);
+            cmnSkillLevelGR.addQuery("value", input.skill.userSkill.skillLevelValue);
+            cmnSkillLevelGR.query();
+            cmnSkillLevelGR.next();
+            /* call to SkillAssignmentAPI to assign skill to user without skill level */
+            new UserManagedSkillAssignment().assignManagedSkillToUser(userId, skillId, cmnSkillLevelGR.getValue('sys_id'));
+            return;
+        }
+        /* call to SkillAssignmentAPI to assign skill to user without skill level */
+        new UserManagedSkillAssignment().assignManagedSkillToUser(userId, skillId);
+    }
+    if (input &amp;&amp; input.string) {
+        var loggedInserId = $sp.getParameter("sys_id") || gs.getUserID();
+        var serachSkills = new SearchSkills();
+        var searchResult = serachSkills.performSearch(input.string, loggedInserId);
+        data.searchResult = searchResult;
+    }
+	
+	//Marking addedtoprofile field as true in extracted table as skill is being added to user profile through add skills butto
+    function markExtractedSkillAsTrue(userId, skillId) {
+        var gr = new GlideRecord('sn_skills_int_extracted_skill')
+        gr.addQuery('user', userId);
+        gr.addQuery('skill', skillId);
+        gr.query();
+        gr.added_to_profile = true;
+        gr.update();
+    }
+
+})();]]&gt;&lt;/script&gt;&lt;servicenow&gt;false&lt;/servicenow&gt;&lt;sys_class_name&gt;sp_widget&lt;/sys_class_name&gt;&lt;sys_created_by&gt;admin&lt;/sys_created_by&gt;&lt;sys_created_on&gt;2022-09-08 13:41:17&lt;/sys_created_on&gt;&lt;sys_id&gt;5f6dde3db7f5111084c46bbf1e11a977&lt;/sys_id&gt;&lt;sys_mod_count&gt;24&lt;/sys_mod_count&gt;&lt;sys_name&gt;Add Skills&lt;/sys_name&gt;&lt;sys_package display_value="Skills Intelligence" source="sn_skills_int"&gt;a02907e177211110fe0050f79a106105&lt;/sys_package&gt;&lt;sys_policy/&gt;&lt;sys_scope display_value="Skills Intelligence"&gt;a02907e177211110fe0050f79a106105&lt;/sys_scope&gt;&lt;sys_update_name&gt;sp_widget_5f6dde3db7f5111084c46bbf1e11a977&lt;/sys_update_name&gt;&lt;sys_updated_by&gt;admin&lt;/sys_updated_by&gt;&lt;sys_updated_on&gt;2023-07-10 11:24:32&lt;/sys_updated_on&gt;&lt;template&gt;&lt;![CDATA[&lt;div class='container-fluid typeahead'&gt;
+    &lt;input
+           id="input"
+           type="text" 
+           ng-model="searchStr"
+           placeholder="${Start typing a skill name}"
+           typeahead-template-url="typeahead-skill-rating.html"
+           uib-typeahead="item for item in searchSkill($viewValue)"
+           typeahead-popup-template-url="sp-typeahead-popup.html"
+           typeahead-input-formatter="displaySkillName($model)" 
+           class="form-control"
+           typeahead-no-results="noResults"
+           aria-autocomplete="list"
+           tabindex="0" aria-haspopup="true"
+           typeahead-on-select="updateSkill($item)"
+           typeahead-wait-ms=500 
+           role="combobox"&gt;
+    &lt;div ng-show="noResults" style="margin-top: 10px;"&gt;
+      ${No Results Found}
+    &lt;/div&gt;
+&lt;/div&gt;
+	
+
+
+
+]]&gt;&lt;/template&gt;&lt;/sp_widget&gt;</payload>
+        <sys_class_name>sp_rel_widget_clone</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-11-29 05:46:14</sys_created_on>
+        <sys_id>075feaed4336b510cc7e00002fb8f21b</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>c35fa6ad4336b510cc7e00002fb8f27e</sys_name>
+        <sys_package display_value="CreateNotes" source="x_snc_createnotes">df5fd9a5090232007f44e1046c8ff69f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="CreateNotes">df5fd9a5090232007f44e1046c8ff69f</sys_scope>
+        <sys_update_name>sp_rel_widget_clone_075feaed4336b510cc7e00002fb8f21b</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-11-29 05:46:14</sys_updated_on>
+    </sp_rel_widget_clone>
+</record_update>

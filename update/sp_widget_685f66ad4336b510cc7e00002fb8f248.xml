@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sp_widget">
+    <sp_widget action="INSERT_OR_UPDATE">
+        <category>custom</category>
+        <client_script><![CDATA[function controller($http, $filter, $location, spAriaUtil, $window, $scope, $rootScope) {
+    var c = this;
+    var skillLevelTypes = {};
+
+    $rootScope.$on("refresh_typeahead", function() {
+        $scope.searchStr = '';
+    });
+
+    $scope.displayRating = true;
+
+    /*function to call Skill Recommendation API*/
+    $scope.searchSkill = function(userInputString) {
+        var searchKeyWord = {
+            string: userInputString
+        };
+        return c.server.get(searchKeyWord).then(function(resp) {
+            var levelTypeDtlIndex = resp.data.searchResult.findIndex(function(a) {
+                a.levelTypeDtl != undefined;
+            });
+
+            skillLevelTypes = resp.data.searchResult.splice(levelTypeDtlIndex, 1);
+            var searchResult = resp.data.searchResult;
+            for (var i = 0; i < searchResult.length; i++) {
+                if (skillLevelTypes[0].levelTypeDtl && skillLevelTypes[0].levelTypeDtl[searchResult[i].levelTypeSysId]) {
+                    searchResult[i].levelCount = skillLevelTypes[0].levelTypeDtl[searchResult[i].levelTypeSysId].levelCount;
+                    searchResult[i].titles = $scope.noTitles(searchResult[i].levelTypeSysId);
+                } else
+                    searchResult[i].levelCount = 0;
+            }
+            $scope.displayRating = false;
+
+            setTimeout(function() {
+                $scope.displayRating = true;
+                $scope.$apply();
+            });
+            return searchResult;
+        })
+    }
+
+    $scope.updateSkill = function(skill) {
+        c.data.skill = skill;
+        c.server.update();
+    }
+
+    /* function to format match from typeahead and show nothing*/
+    $scope.displaySkillName = function(model) {
+        if (model)
+            return ''
+    }
+
+    /* Function to return an empty array for star titles */
+    $scope.noTitles = function(levelsysid) {
+        if (!skillLevelTypes[0].levelTypeDtl[levelsysid])
+            return [''];
+        var len = skillLevelTypes[0].levelTypeDtl[levelsysid].levelCount;
+        return Array.apply(null, Array(len)).map(function() {
+            return ''
+        });
+    }
+
+}]]></client_script>
+        <controller_as>c</controller_as>
+        <css>.dropdown-menu &gt; .active &gt; a, .dropdown-menu &gt; .active &gt; a:hover, .dropdown-menu &gt; .active &gt; a:focus {&#13;
+  background-color: #E4E6EA!important;&#13;
+}&#13;
+&#13;
+.typeahead {&#13;
+  padding: 8px 0px 0px 0px;&#13;
+}&#13;
+&#13;
+.typeahead-popup {&#13;
+    position: absolute;&#13;
+    top: 100%;&#13;
+  	left: 0;&#13;
+    z-index: 1000;&#13;
+    display: block;&#13;
+    width: 66.5% !important;  &#13;
+  }&#13;
+&#13;
+.typeahead .typeahead-popup &gt; .dropdown-menu {&#13;
+    position: static;&#13;
+    display: block;&#13;
+    width: inherit;&#13;
+    min-width: 82% !important;&#13;
+ }</css>
+        <data_table>sp_instance_ais</data_table>
+        <demo_data/>
+        <description/>
+        <docs/>
+        <field_list>search_application,search_results_configuration,disable_all_suggestions,placeholder,ai_search_source_filter</field_list>
+        <has_preview>true</has_preview>
+        <id/>
+        <internal>false</internal>
+        <link><![CDATA[function link(scope, element, attrs, controller) {  }]]></link>
+        <name>Copy of Add Skills</name>
+        <option_schema>[{"hint":"Whether skill will be added to users' profile","name":"add_skill_to_profile","section":"Presentation","default_value":"true","label":"Add Skill To Profile","type":"boolean"},{"name":"color","section":"Presentation","label":"Color","type":"string"},{"name":"glyph","section":"Presentation","label":"glyph","type":"string"},{"name":"size","section":"Presentation","label":"Size","type":"string"},{"hint":"Number of typeahead search results returned (default 15)","name":"limit","section":"Behavior","label":"Limit","type":"integer"},{"displayValue":"Search Source","hint":"If provided, limit the scope of the typeahead search to the given search sources","name":"contextual_search_sources","display_value_list":[],"section":"Behavior","label":"Contextual Search Sources","type":"glide_list","value":"sp_search_source","ed":{"reference":"sp_search_source"}},{"name":"title","section":"other","default_value":"skill search dropdown","label":"title","type":"string"}]</option_schema>
+        <public>false</public>
+        <roles>sn_skills_int.admin,sn_skills_int.emp,sn_skills_int.manager</roles>
+        <script><![CDATA[(function() {
+    data.searchSuggestionsMsg = "menu";
+    if (input && input.skill) {
+        var userId = $sp.getParameter("sys_id") || gs.getUserID();
+        var skillId = input.skill.sysId;
+        markExtractedSkillAsTrue(userId, skillId);
+        var cmnSkillLevelGR = new GlideRecord(SkillConstants.CMN_SKILL_LEVEL);
+        if (input.skill.levelTypeSysId && input.skill.userSkill && input.skill.userSkill.skillLevelValue && cmnSkillLevelGR.canRead()) {
+            cmnSkillLevelGR.addQuery("skill_level_type", input.skill.levelTypeSysId);
+            cmnSkillLevelGR.addQuery("value", input.skill.userSkill.skillLevelValue);
+            cmnSkillLevelGR.query();
+            cmnSkillLevelGR.next();
+            /* call to SkillAssignmentAPI to assign skill to user without skill level */
+            new UserManagedSkillAssignment().assignManagedSkillToUser(userId, skillId, cmnSkillLevelGR.getValue('sys_id'));
+            return;
+        }
+        /* call to SkillAssignmentAPI to assign skill to user without skill level */
+        new UserManagedSkillAssignment().assignManagedSkillToUser(userId, skillId);
+    }
+    if (input && input.string) {
+        var loggedInserId = $sp.getParameter("sys_id") || gs.getUserID();
+        var serachSkills = new SearchSkills();
+        var searchResult = serachSkills.performSearch(input.string, loggedInserId);
+        data.searchResult = searchResult;
+    }
+	
+	//Marking addedtoprofile field as true in extracted table as skill is being added to user profile through add skills butto
+    function markExtractedSkillAsTrue(userId, skillId) {
+        var gr = new GlideRecord('sn_skills_int_extracted_skill')
+        gr.addQuery('user', userId);
+        gr.addQuery('skill', skillId);
+        gr.query();
+        gr.added_to_profile = true;
+        gr.update();
+    }
+
+})();]]></script>
+        <servicenow>false</servicenow>
+        <sys_class_name>sp_widget</sys_class_name>
+        <sys_created_by>admin</sys_created_by>
+        <sys_created_on>2023-11-29 05:46:04</sys_created_on>
+        <sys_id>685f66ad4336b510cc7e00002fb8f248</sys_id>
+        <sys_mod_count>0</sys_mod_count>
+        <sys_name>Copy of Add Skills</sys_name>
+        <sys_package display_value="CreateNotes" source="x_snc_createnotes">df5fd9a5090232007f44e1046c8ff69f</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="CreateNotes">df5fd9a5090232007f44e1046c8ff69f</sys_scope>
+        <sys_update_name>sp_widget_685f66ad4336b510cc7e00002fb8f248</sys_update_name>
+        <sys_updated_by>admin</sys_updated_by>
+        <sys_updated_on>2023-11-29 05:46:04</sys_updated_on>
+        <template><![CDATA[<div class='container-fluid typeahead'>
+    <input
+           id="input"
+           type="text" 
+           ng-model="searchStr"
+           placeholder="${Start typing a skill name}"
+           typeahead-template-url="typeahead-skill-rating.html"
+           uib-typeahead="item for item in searchSkill($viewValue)"
+           typeahead-popup-template-url="sp-typeahead-popup.html"
+           typeahead-input-formatter="displaySkillName($model)" 
+           class="form-control"
+           typeahead-no-results="noResults"
+           aria-autocomplete="list"
+           tabindex="0" aria-haspopup="true"
+           typeahead-on-select="updateSkill($item)"
+           typeahead-wait-ms=500 
+           role="combobox">
+    <div ng-show="noResults" style="margin-top: 10px;">
+      ${No Results Found}
+    </div>
+</div>
+	
+
+
+
+]]></template>
+    </sp_widget>
+</record_update>
